@@ -45,7 +45,8 @@ LinkSync::LinkSync(DBConnector *appl_db, DBConnector *state_db) :
     m_portTableProducer(appl_db, APP_PORT_TABLE_NAME),
     m_portTable(appl_db, APP_PORT_TABLE_NAME),
     m_statePortTable(state_db, STATE_PORT_TABLE_NAME),
-    m_stateMgmtPortTable(state_db, STATE_MGMT_PORT_TABLE_NAME)
+    m_stateMgmtPortTable(state_db, STATE_MGMT_PORT_TABLE_NAME),
+    m_appSystemPortTable(appl_db, APP_SYSTEM_PORT_TABLE_NAME)
 {
     struct if_nameindex *if_ni, *idx_p;
     if_ni = if_nameindex();
@@ -165,9 +166,11 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
     struct rtnl_link *link = (struct rtnl_link *)obj;
     string key = rtnl_link_get_name(link);
 
+    vector<FieldValueTuple> temp;
     if (key.compare(0, INTFS_PREFIX.length(), INTFS_PREFIX) &&
         key.compare(0, LAG_PREFIX.length(), LAG_PREFIX) &&
-        key.compare(0, MGMT_PREFIX.length(), MGMT_PREFIX))
+        key.compare(0, MGMT_PREFIX.length(), MGMT_PREFIX) &&
+        !m_appSystemPortTable.get(key, temp))
     {
         return;
     }
@@ -246,10 +249,20 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
     /* front panel interfaces: Check if the port is in the PORT_TABLE
      * non-front panel interfaces such as eth0, lo which are not in the
      * PORT_TABLE are ignored. */
-    vector<FieldValueTuple> temp;
     if (m_portTable.get(key, temp))
     {
         g_portSet.erase(key);
+        FieldValueTuple tuple("state", "ok");
+        vector<FieldValueTuple> vector;
+        vector.push_back(tuple);
+        m_statePortTable.set(key, vector);
+        SWSS_LOG_NOTICE("Publish %s(ok) to state db", key.c_str());
+    }
+    else if (m_appSystemPortTable.get(key, temp))
+    {
+        //Remote System Ports
+
+        //Set the state in the state db
         FieldValueTuple tuple("state", "ok");
         vector<FieldValueTuple> vector;
         vector.push_back(tuple);

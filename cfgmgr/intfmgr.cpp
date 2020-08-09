@@ -613,6 +613,13 @@ void IntfMgr::doTask(Consumer &consumer)
 {
     SWSS_LOG_ENTER();
 
+    string table_name = consumer.getTableName();
+    if(table_name == CFG_VOQ_INBAND_INTERFACE_TABLE_NAME)
+    {
+        doCfgVoqInbandInterfaceTask(consumer);
+        return;
+    }
+
     auto it = consumer.m_toSync.begin();
     while (it != consumer.m_toSync.end())
     {
@@ -628,6 +635,75 @@ void IntfMgr::doTask(Consumer &consumer)
             {
                 it++;
                 continue;
+            }
+        }
+        else if (keys.size() == 2)
+        {
+            if (!doIntfAddrTask(keys, data, op))
+            {
+                it++;
+                continue;
+            }
+        }
+        else
+        {
+            SWSS_LOG_ERROR("Invalid key %s", kfvKey(t).c_str());
+        }
+
+        it = consumer.m_toSync.erase(it);
+    }
+}
+
+void IntfMgr::doCfgVoqInbandInterfaceTask(Consumer &consumer)
+{
+    SWSS_LOG_ENTER();
+
+    string inband_type="";
+
+    auto it = consumer.m_toSync.begin();
+    while (it != consumer.m_toSync.end())
+    {
+        KeyOpFieldsValuesTuple t = it->second;
+
+        vector<string> keys = tokenize(kfvKey(t), config_db_key_delimiter);
+        const vector<FieldValueTuple>& data = kfvFieldsValues(t);
+        string op = kfvOp(t);
+        string alias(keys[0]);
+
+        if (keys.size() == 1)
+        {
+            for (auto idx : data)
+            {
+                const auto &field = fvField(idx);
+                const auto &value = fvValue(idx);
+
+                if (field == "inband_type")
+                {
+                    inband_type = value;
+                }
+
+            }
+
+            if(inband_type == "port")
+            {
+                if(op == SET_COMMAND)
+                {
+                    //For "port" type inband interface no further processing is needed.
+                    m_appIntfTableProducer.set(alias, data);
+                    m_stateIntfTable.hset(alias, "vrf", "");
+                }
+                else if(op == DEL_COMMAND)
+                {
+                    if (!doIntfGeneralTask(keys, data, op))
+                    {
+                        it++;
+                        continue;
+                    }
+                }
+            }
+            else
+            {
+                SWSS_LOG_ERROR("%s type Inband interface not supported! i/f: %s", inband_type.c_str(), kfvKey(t).c_str());
             }
         }
         else if (keys.size() == 2)
