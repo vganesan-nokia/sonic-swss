@@ -4688,26 +4688,34 @@ bool PortsOrch::voqAddInbandHostIf(string &alias, Port &port)
 {
     if(m_inbandPortName == alias)
     {
-        //Hostif already created for this
-        SWSS_LOG_ERROR("Host interface %s already exists!", alias.c_str());
+        //Inband interface already exists with this name
+        SWSS_LOG_ERROR("Interface %s is already configured as inband!", alias.c_str());
         return true;
     }
 
-    if(!addHostIntfs(port, alias, port.m_hif_id))
+    if(!port.m_hif_id)
     {
-        SWSS_LOG_ERROR("Failed to create host interface for port %s", alias.c_str());
-        return false;
+        if(!addHostIntfs(port, alias, port.m_hif_id))
+        {
+            SWSS_LOG_ERROR("Failed to create host interface for port %s", alias.c_str());
+            return false;
+        }
+
+        if (!setHostIntfsOperStatus(port, true))
+        {
+            SWSS_LOG_ERROR("Failed to set operation status UP to host interface %s", alias.c_str());
+            return false;
+        }
+        SWSS_LOG_NOTICE("Added host if %" PRIx64 " for system port %s", port.m_hif_id, alias.c_str());
+    }
+    else
+    {
+        SWSS_LOG_NOTICE("Host interface already exists for port %s", alias.c_str());
     }
 
-    if (!setHostIntfsOperStatus(port, true))
-    {
-        SWSS_LOG_ERROR("Failed to set operation status UP to host interface %s", alias.c_str());
-        return false;
-    }
     //Store the name of the local inband port
     m_inbandPortName = alias;
 
-    SWSS_LOG_NOTICE("Added host if %" PRIx64 " for system port %s", port.m_hif_id, alias.c_str());
     return true;
 }
 
