@@ -1328,8 +1328,13 @@ bool IntfsOrch::voqSyncAddIntf(string &alias, sai_object_id_t &rif_id)
         {
             return true;
         }
+	alias = port.m_system_port_info.alias;
     }
-    alias = port.m_system_port_info.alias;
+    else
+    {
+        SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
+        return false;
+    }
 
     //Get router interface to make sure it exists
     sai_attribute_t attr;
@@ -1372,8 +1377,13 @@ bool IntfsOrch::voqSyncDelIntf(string &alias)
         {
             return true;
         }
+	alias = port.m_system_port_info.alias;
     }
-    alias = port.m_system_port_info.alias;
+    else
+    {
+        SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
+        return false;
+    }
 
     m_tableVoqSystemInterfaceTable.del(alias);
 

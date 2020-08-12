@@ -1000,8 +1000,13 @@ bool NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacA
         {
             return true;
         }
+	alias = port.m_system_port_info.alias;
     }
-    alias = port.m_system_port_info.alias;
+    else
+    {
+        SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
+        return false;
+    }
 
     attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX;
 
@@ -1037,8 +1042,13 @@ bool NeighOrch::voqSyncDelNeigh(string &alias, IpAddress &ip_address)
         {
             return true;
         }
+	alias = port.m_system_port_info.alias;
     }
-    alias = port.m_system_port_info.alias;
+    else
+    {
+        SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
+        return false;
+    }
 
     string key = alias + ":" + ip_address.to_string();
     m_tableVoqSystemNeighTable.del(key);
