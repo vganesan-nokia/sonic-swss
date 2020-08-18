@@ -684,26 +684,19 @@ void IntfMgr::doCfgVoqInbandInterfaceTask(Consumer &consumer)
 
             }
 
-            if(inband_type == "port")
+            if(op == SET_COMMAND)
             {
-                if(op == SET_COMMAND)
-                {
-                    //For "port" type inband interface no further processing is needed.
-                    m_appIntfTableProducer.set(alias, data);
-                    m_stateIntfTable.hset(alias, "vrf", "");
-                }
-                else if(op == DEL_COMMAND)
-                {
-                    if (!doIntfGeneralTask(keys, data, op))
-                    {
-                        it++;
-                        continue;
-                    }
-                }
+                //No further processing. Just push to orchagent
+                m_appIntfTableProducer.set(alias, data);
+                m_stateIntfTable.hset(alias, "vrf", "");
             }
-            else
+            else if(op == DEL_COMMAND)
             {
-                SWSS_LOG_ERROR("%s type Inband interface not supported! i/f: %s", inband_type.c_str(), kfvKey(t).c_str());
+                if (!doIntfGeneralTask(keys, data, op))
+                {
+                    it++;
+                    continue;
+                }
             }
         }
         else if (keys.size() == 2)

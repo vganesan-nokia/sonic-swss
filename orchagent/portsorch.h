@@ -129,7 +129,7 @@ public:
     void getLagMember(Port &lag, vector<Port> &portv);
 
     string m_inbandPortName = "";
-    bool voqAddInbandHostIf(string &alias, Port &port);
+    bool setVoqInbandIntf(string &alias, string &type);
     bool setSystemPortHostIfAdminUp(string alias);
 
 private:

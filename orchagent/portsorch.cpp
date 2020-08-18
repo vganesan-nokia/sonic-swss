@@ -4684,36 +4684,27 @@ bool PortsOrch::getInbandPort(Port &port)
     }
 }
 
-bool PortsOrch::voqAddInbandHostIf(string &alias, Port &port)
+bool PortsOrch::setVoqInbandIntf(string &alias, string &type)
 {
     if(m_inbandPortName == alias)
     {
         //Inband interface already exists with this name
-        SWSS_LOG_ERROR("Interface %s is already configured as inband!", alias.c_str());
+        SWSS_LOG_NOTICE("Interface %s is already configured as inband!", alias.c_str());
         return true;
     }
 
-    if(!port.m_hif_id)
+    Port port;
+    if(type == "port")
     {
-        if(!addHostIntfs(port, alias, port.m_hif_id))
+        if (!getPort(alias, port))
         {
-            SWSS_LOG_ERROR("Failed to create host interface for port %s", alias.c_str());
+            SWSS_LOG_NOTICE("Port configured for inband intf %s is not ready!", alias.c_str());
             return false;
         }
-
-        if (!setHostIntfsOperStatus(port, true))
-        {
-            SWSS_LOG_ERROR("Failed to set operation status UP to host interface %s", alias.c_str());
-            return false;
-        }
-        SWSS_LOG_NOTICE("Added host if %" PRIx64 " for system port %s", port.m_hif_id, alias.c_str());
     }
-    else
-    {
-        SWSS_LOG_NOTICE("Host interface already exists for port %s", alias.c_str());
-    }
+    // May do the processing for other inband type like type=vlan here
 
-    //Store the name of the local inband port
+    //Store the name of the inband interface
     m_inbandPortName = alias;
 
     return true;

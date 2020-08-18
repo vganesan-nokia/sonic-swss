@@ -440,11 +440,8 @@ bool IntfsOrch::setIntf(const string& alias, sai_object_id_t vrf_id, const IpPre
 
     if(alias == gPortsOrch->m_inbandPortName)
     {
+        //Need to sync the inband intf neighbor for other asics
         gNeighOrch->addInbandNeighbor(alias, ip_prefix->getIp());
-
-        //There is no config to bring inband host if admin up. So bring the
-        //admin up here after setting the Ip2me route for inband host if ip
-        gPortsOrch->setSystemPortHostIfAdminUp(alias);
     }
 
     if (port.m_type == Port::VLAN)
@@ -700,6 +697,16 @@ void IntfsOrch::doTask(Consumer &consumer)
                 continue;
             }
 
+            //Voq Inband interface config processing
+            if(inband_type.size() && !ip_prefix_in_key)
+            {
+                if(!gPortsOrch->setVoqInbandIntf(alias, inband_type))
+                {
+                    it++;
+                    continue;
+                }
+            }
+
             Port port;
             if (!gPortsOrch->getPort(alias, port))
             {
@@ -717,11 +724,6 @@ void IntfsOrch::doTask(Consumer &consumer)
                     it++;
                     continue;
                 }
-            }
-
-            if(inband_type == "port")
-            {
-                gPortsOrch->voqAddInbandHostIf(alias, port);
             }
 
             if (m_vnetInfses.find(alias) != m_vnetInfses.end())
