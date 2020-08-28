@@ -28,6 +28,7 @@ const char comma               = ',';
 const char range_specifier     = '-';
 const char config_db_key_delimiter = '|';
 const char state_db_key_delimiter  = '|';
+const char voq_db_key_delimiter  = ':';
 
 #define INVM_PLATFORM_SUBSTRING "innovium"
 #define MLNX_PLATFORM_SUBSTRING "mellanox"

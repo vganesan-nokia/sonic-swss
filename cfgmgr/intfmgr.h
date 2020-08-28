@@ -30,7 +30,7 @@ private:
     bool doIntfGeneralTask(const std::vector<std::string>& keys, std::vector<FieldValueTuple> data, const std::string& op);
     bool doIntfAddrTask(const std::vector<std::string>& keys, const std::vector<FieldValueTuple>& data, const std::string& op);
     void doTask(Consumer &consumer);
-    
+    void doCfgVoqInbandInterfaceTask(Consumer &consumer);
     bool isIntfStateOk(const std::string &alias);
     bool isIntfCreated(const std::string &alias);
     bool isIntfChangeVrf(const std::string &alias, const std::string &vrfName);

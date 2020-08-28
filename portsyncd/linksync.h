@@ -21,6 +21,7 @@ public:
 private:
     ProducerStateTable m_portTableProducer;
     Table m_portTable, m_statePortTable, m_stateMgmtPortTable;
+    Table m_appSystemPortTable;
 
     std::map<unsigned int, std::string> m_ifindexNameMap;
     std::map<unsigned int, std::string> m_ifindexOldNameMap;
