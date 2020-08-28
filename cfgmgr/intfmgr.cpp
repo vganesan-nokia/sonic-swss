@@ -658,8 +658,6 @@ void IntfMgr::doCfgVoqInbandInterfaceTask(Consumer &consumer)
 {
     SWSS_LOG_ENTER();
 
-    string inband_type="";
-
     auto it = consumer.m_toSync.begin();
     while (it != consumer.m_toSync.end())
     {
@@ -672,18 +670,6 @@ void IntfMgr::doCfgVoqInbandInterfaceTask(Consumer &consumer)
 
         if (keys.size() == 1)
         {
-            for (auto idx : data)
-            {
-                const auto &field = fvField(idx);
-                const auto &value = fvValue(idx);
-
-                if (field == "inband_type")
-                {
-                    inband_type = value;
-                }
-
-            }
-
             if(op == SET_COMMAND)
             {
                 //No further processing. Just push to orchagent
