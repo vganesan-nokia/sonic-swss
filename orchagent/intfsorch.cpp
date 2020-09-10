@@ -16,6 +16,7 @@
 #include "bufferorch.h"
 #include "directory.h"
 #include "vnetorch.h"
+#include "subscriberstatetable.h"
 
 extern sai_object_id_t gVirtualRouterId;
 extern Directory<Orch*> gDirectory;
@@ -32,6 +33,7 @@ extern RouteOrch *gRouteOrch;
 extern CrmOrch *gCrmOrch;
 extern BufferOrch *gBufferOrch;
 extern bool gIsNatSupported;
+extern string gMySwitchType;
 
 const int intfsorch_pri = 35;
 
@@ -52,7 +54,7 @@ static const vector<sai_router_interface_stat_t> rifStatIds =
     SAI_ROUTER_INTERFACE_STAT_OUT_ERROR_OCTETS,
 };
 
-IntfsOrch::IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch) :
+IntfsOrch::IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch, DBConnector *globalAppDb) :
         Orch(db, tableName, intfsorch_pri), m_vrfOrch(vrf_orch)
 {
     SWSS_LOG_ENTER();
@@ -96,6 +98,15 @@ IntfsOrch::IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch) :
     {
         SWSS_LOG_WARN("RIF flex counter group plugins was not set successfully: %s", e.what());
     }
+
+    if(gMySwitchType == "voq")
+    {
+        //Add subscriber to process VOQ system interface
+        tableName = VOQ_SYSTEM_INTERFACE_TABLE_NAME;
+        Orch::addExecutor(new Consumer(new SubscriberStateTable(globalAppDb, tableName, TableConsumable::DEFAULT_POP_BATCH_SIZE, 0), this, tableName));
+        m_tableVoqSystemInterfaceTable = unique_ptr<Table>(new Table(globalAppDb, VOQ_SYSTEM_INTERFACE_TABLE_NAME));
+    }
+
 }
 
 sai_object_id_t IntfsOrch::getRouterIntfsId(const string &alias)
@@ -497,6 +508,8 @@ void IntfsOrch::doTask(Consumer &consumer)
         return;
     }
 
+    string table_name = consumer.getTableName();
+
     auto it = consumer.m_toSync.begin();
     while (it != consumer.m_toSync.end())
     {
@@ -519,6 +532,16 @@ void IntfsOrch::doTask(Consumer &consumer)
         {
             ip_prefix = kfvKey(t).substr(kfvKey(t).find(':')+1);
             ip_prefix_in_key = true;
+        }
+
+        if(table_name == VOQ_SYSTEM_INTERFACE_TABLE_NAME)
+        {
+            if(!isRemoteSystemPortIntf(alias))
+            {
+                //Synced local interface. Skip
+                it = consumer.m_toSync.erase(it);
+                continue;
+            }
         }
 
         const vector<FieldValueTuple>& data = kfvFieldsValues(t);
@@ -895,6 +918,7 @@ bool IntfsOrch::addRouterIntfs(sai_object_id_t vrf_id, Port &port)
     {
         case Port::PHY:
         case Port::LAG:
+        case Port::SYSTEM:
             attr.value.s32 = SAI_ROUTER_INTERFACE_TYPE_PORT;
             attrs.push_back(attr);
             break;
@@ -914,6 +938,7 @@ bool IntfsOrch::addRouterIntfs(sai_object_id_t vrf_id, Port &port)
     switch(port.m_type)
     {
         case Port::PHY:
+        case Port::SYSTEM:
             attr.id = SAI_ROUTER_INTERFACE_ATTR_PORT_ID;
             attr.value.oid = port.m_port_id;
             attrs.push_back(attr);
@@ -978,6 +1003,12 @@ bool IntfsOrch::addRouterIntfs(sai_object_id_t vrf_id, Port &port)
 
     SWSS_LOG_NOTICE("Create router interface %s MTU %u", port.m_alias.c_str(), port.m_mtu);
 
+    if(gMySwitchType == "voq")
+    {
+        //Sync the interface to add to the SYSTEM_INTERFACE table of GLOBAL_APP_DB
+        voqSyncAddIntf(port.m_alias, port.m_rif_id);
+    }
+
     return true;
 }
 
@@ -1007,6 +1038,12 @@ bool IntfsOrch::removeRouterIntfs(Port &port)
     gPortsOrch->setPort(port.m_alias, port);
 
     SWSS_LOG_NOTICE("Remove router interface for port %s", port.m_alias.c_str());
+
+    if(gMySwitchType == "voq")
+    {
+        //Sync the interface to del from the SYSTEM_INTERFACE table of GLOBAL_APP_DB
+        voqSyncDelIntf(port.m_alias);
+    }
 
     return true;
 }
@@ -1230,6 +1267,7 @@ void IntfsOrch::doTask(SelectableTimer &timer)
         {
             case Port::PHY:
             case Port::LAG:
+            case Port::SYSTEM:
                 type = "SAI_ROUTER_INTERFACE_TYPE_PORT";
                 break;
             case Port::VLAN:
@@ -1255,3 +1293,88 @@ void IntfsOrch::doTask(SelectableTimer &timer)
         }
     }
 }
+
+bool IntfsOrch::isRemoteSystemPortIntf(string alias)
+{
+    Port port;
+    if(gPortsOrch->getPort(alias, port))
+    {
+        return(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE);
+    }
+    //Given alias is system port alias of the local port
+    return false;
+}
+
+bool IntfsOrch::voqSyncAddIntf(string &alias, sai_object_id_t &rif_id)
+{
+    //Sync only local interface. Confirm for the local interface and
+    //get the system port alias for key for syncing
+    Port port;
+    if(gPortsOrch->getPort(alias, port))
+    {
+        if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+        {
+            return true;
+        }
+        alias = port.m_system_port_info.alias;
+    }
+    else
+    {
+        SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
+        return false;
+    }
+
+    //Get router interface to make sure it exists
+    sai_attribute_t attr;
+    sai_status_t status;
+
+    attr.id = SAI_ROUTER_INTERFACE_ATTR_PORT_ID;
+
+    status = sai_router_intfs_api->get_router_interface_attribute(rif_id, 1, &attr);
+    if (status != SAI_STATUS_SUCCESS)
+    {
+        SWSS_LOG_ERROR("Failed to get rif for %s:0x%lx, rv:%d", alias.c_str(), rif_id, status);
+        return false;
+    }
+
+    //Get the Real ID of the RIF ID
+    string value;
+    const auto id = sai_serialize_object_id(rif_id);
+
+    if (m_vidToRidTable->hget("", id, value))
+    {
+        FieldValueTuple rifIdFv ("rif_id", value);
+        vector<FieldValueTuple> attrs;
+        attrs.push_back(rifIdFv);
+
+        m_tableVoqSystemInterfaceTable->set(alias, attrs);
+        return true;
+    }
+    SWSS_LOG_ERROR("Failed to get real ID from ASIC DB for RIF id 0x%lx of %s", rif_id, alias.c_str());
+    return false;
+}
+
+bool IntfsOrch::voqSyncDelIntf(string &alias)
+{
+    //Sync only local interface. Confirm for the local interface and
+    //get the system port alias for key for syncing to GLOBAL_APP_DB
+    Port port;
+    if(gPortsOrch->getPort(alias, port))
+    {
+        if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+        {
+            return true;
+        }
+        alias = port.m_system_port_info.alias;
+    }
+    else
+    {
+        SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
+        return false;
+    }
+
+    m_tableVoqSystemInterfaceTable->del(alias);
+
+    return true;
+}
+

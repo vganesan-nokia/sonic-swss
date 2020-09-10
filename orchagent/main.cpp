@@ -518,9 +518,17 @@ int main(int argc, char **argv)
     DBConnector config_db("CONFIG_DB", 0);
     DBConnector state_db("STATE_DB", 0);
 
+    shared_ptr<DBConnector> global_app_db;
+    if(gMySwitchType == "voq")
+    {
+        //Connection for GLOBAL_APP_DB in redis-server in control/supervisor card as per
+        //connection info in database_config.json
+        global_app_db = make_shared<DBConnector>("GLOBAL_APP_DB", 0, true);
+    }
+
     init_gearbox_phys(&appl_db);
 
-    auto orchDaemon = make_shared<OrchDaemon>(&appl_db, &config_db, &state_db);
+    auto orchDaemon = make_shared<OrchDaemon>(&appl_db, &config_db, &state_db, global_app_db.get());
 
     if (!orchDaemon->init())
     {
