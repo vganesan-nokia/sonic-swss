@@ -132,6 +132,7 @@ public:
     string m_inbandPortName = "";
     bool isInbandPort(const string &alias);
     bool setVoqInbandIntf(string &alias, string &type);
+    bool setSystemPortHostIfAdminUp(string alias);
 
 private:
     unique_ptr<Table> m_counterTable;

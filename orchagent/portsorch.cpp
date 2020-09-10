@@ -26,6 +26,7 @@
 #include "countercheckorch.h"
 #include "notifier.h"
 #include "redisclient.h"
+#include "exec.h"
 
 extern sai_switch_api_t *sai_switch_api;
 extern sai_bridge_api_t *sai_bridge_api;
@@ -4750,16 +4751,48 @@ bool PortsOrch::setVoqInbandIntf(string &alias, string &type)
             return false;
         }
     }
-
-    // Check for existence of host interface. If does not exist, may create
-    // host if for the inband here
-
     // May do the processing for other inband type like type=vlan here
-    
+
+    if(!port.m_hif_id)
+    {
+        if(!addHostIntfs(port, alias, port.m_hif_id))
+        {
+            SWSS_LOG_ERROR("Failed to create host interface for port %s", alias.c_str());
+            return false;
+        }
+
+        if (!setHostIntfsOperStatus(port, true))
+        {
+            SWSS_LOG_ERROR("Failed to set operation status UP to host interface %s", alias.c_str());
+            return false;
+        }
+        SWSS_LOG_NOTICE("Added host if %" PRIx64 " for system port %s", port.m_hif_id, alias.c_str());
+    }
+
     //Store the name of the local inband port
     m_inbandPortName = alias;
 
     return true;
 }
 
+bool PortsOrch::setSystemPortHostIfAdminUp(string alias)
+{
+    string cmd, res;
+
+    //Bring admin up system port
+    cmd = "ip link set dev " + alias + " up";
+
+    SWSS_LOG_NOTICE("Bring admin up %s: %s", alias.c_str(), cmd.c_str());
+
+    int32_t ret = swss::exec(cmd, res);
+
+    if(ret)
+    {
+        /* Just log error and return */
+        SWSS_LOG_ERROR("Failed to admin up %s", alias.c_str());
+        return false;
+    }
+
+    return true;
+}
 

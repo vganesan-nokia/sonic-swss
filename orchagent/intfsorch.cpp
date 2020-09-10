@@ -448,6 +448,10 @@ bool IntfsOrch::setIntf(const string& alias, sai_object_id_t vrf_id, const IpPre
         {
             //Need to sync the inband intf neighbor for other asics
             gNeighOrch->addInbandNeighbor(alias, ip_prefix->getIp());
+
+            //There is no config to bring inband host if admin up. So bring the
+            //admin up here after setting the Ip2me route for inband host if ip
+            gPortsOrch->setSystemPortHostIfAdminUp(alias);
         }
     }
 
