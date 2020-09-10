@@ -4714,4 +4714,34 @@ bool PortsOrch::addSystemPorts()
     return true;
 }
 
+bool PortsOrch::setVoqInbandIntf(string &alias, string &type)
+{
+    if(m_inbandPortName == alias)
+    {
+        //Inband interface already exists with this name
+        SWSS_LOG_NOTICE("Interface %s is already configured as inband!", alias.c_str());
+        return true;
+    }
+
+    Port port;
+    if(type == "port")
+    {
+        if (!getPort(alias, port))
+        {
+            SWSS_LOG_NOTICE("Port configured for inband intf %s is not ready!", alias.c_str());
+            return false;
+        }
+    }
+
+    // Check for existence of host interface. If does not exist, may create
+    // host if for the inband here
+
+    // May do the processing for other inband type like type=vlan here
+    
+    //Store the name of the local inband port
+    m_inbandPortName = alias;
+
+    return true;
+}
+
 

@@ -552,6 +552,7 @@ void IntfsOrch::doTask(Consumer &consumer)
         bool adminUp;
         uint32_t nat_zone_id = 0;
         string proxy_arp = "";
+        string inband_type = "";
 
         for (auto idx : data)
         {
@@ -631,6 +632,10 @@ void IntfsOrch::doTask(Consumer &consumer)
             {
                 proxy_arp = value;
             }
+            else if (field == "inband_type")
+            {
+                inband_type = value;
+            }
         }
 
         if (alias == "eth0" || alias == "docker0")
@@ -682,6 +687,16 @@ void IntfsOrch::doTask(Consumer &consumer)
 
                 it = consumer.m_toSync.erase(it);
                 continue;
+            }
+
+            //Voq Inband interface config processing
+            if(inband_type.size() && !ip_prefix_in_key)
+            {
+                if(!gPortsOrch->setVoqInbandIntf(alias, inband_type))
+                {
+                    it++;
+                    continue;
+                }
             }
 
             Port port;
