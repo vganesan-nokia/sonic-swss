@@ -4714,6 +4714,24 @@ bool PortsOrch::addSystemPorts()
     return true;
 }
 
+bool PortsOrch::getInbandPort(Port &port)
+{
+    if (m_portList.find(m_inbandPortName) == m_portList.end())
+    {
+        return false;
+    }
+    else
+    {
+        port = m_portList[m_inbandPortName];
+        return true;
+    }
+}
+
+bool PortsOrch::isInbandPort(const string &alias)
+{
+    return (m_inbandPortName == alias);
+}
+
 bool PortsOrch::setVoqInbandIntf(string &alias, string &type)
 {
     if(m_inbandPortName == alias)

@@ -92,6 +92,7 @@ public:
     bool getPortByBridgePortId(sai_object_id_t bridge_port_id, Port &port);
     void setPort(string alias, Port port);
     void getCpuPort(Port &port);
+    bool getInbandPort(Port &port);
     bool getVlanByVlanId(sai_vlan_id_t vlan_id, Port &vlan);
     bool getAclBindPortId(string alias, sai_object_id_t &port_id);
 
@@ -129,6 +130,7 @@ public:
     void getLagMember(Port &lag, vector<Port> &portv);
 
     string m_inbandPortName = "";
+    bool isInbandPort(const string &alias);
     bool setVoqInbandIntf(string &alias, string &type);
 
 private:

@@ -126,7 +126,7 @@ bool OrchDaemon::init()
     gDirectory.set(chassis_frontend_orch);
 
     gIntfsOrch = new IntfsOrch(m_applDb, APP_INTF_TABLE_NAME, vrf_orch, m_globalAppDb);
-    gNeighOrch = new NeighOrch(m_applDb, APP_NEIGH_TABLE_NAME, gIntfsOrch);
+    gNeighOrch = new NeighOrch(m_applDb, APP_NEIGH_TABLE_NAME, gIntfsOrch, m_globalAppDb);
     gRouteOrch = new RouteOrch(m_applDb, APP_ROUTE_TABLE_NAME, gSwitchOrch, gNeighOrch, gIntfsOrch, vrf_orch);
 
     TableConnector confDbSflowTable(m_configDb, CFG_SFLOW_TABLE_NAME);

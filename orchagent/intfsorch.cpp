@@ -33,6 +33,7 @@ extern RouteOrch *gRouteOrch;
 extern CrmOrch *gCrmOrch;
 extern BufferOrch *gBufferOrch;
 extern bool gIsNatSupported;
+extern NeighOrch *gNeighOrch;
 extern string gMySwitchType;
 
 const int intfsorch_pri = 35;
@@ -441,6 +442,15 @@ bool IntfsOrch::setIntf(const string& alias, sai_object_id_t vrf_id, const IpPre
 
     addIp2MeRoute(port.m_vr_id, *ip_prefix);
 
+    if(gMySwitchType == "voq")
+    {
+        if(gPortsOrch->isInbandPort(alias))
+        {
+            //Need to sync the inband intf neighbor for other asics
+            gNeighOrch->addInbandNeighbor(alias, ip_prefix->getIp());
+        }
+    }
+
     if (port.m_type == Port::VLAN)
     {
         addDirectedBroadcast(port, *ip_prefix);
@@ -463,6 +473,14 @@ bool IntfsOrch::removeIntf(const string& alias, sai_object_id_t vrf_id, const Ip
     if (ip_prefix && m_syncdIntfses[alias].ip_addresses.count(*ip_prefix))
     {
         removeIp2MeRoute(port.m_vr_id, *ip_prefix);
+
+        if(gMySwitchType == "voq")
+        {
+            if(gPortsOrch->isInbandPort(alias))
+            {
+                gNeighOrch->delInbandNeighbor(alias, ip_prefix->getIp());
+            }
+        }
 
         if(port.m_type == Port::VLAN)
         {

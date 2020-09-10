@@ -317,7 +317,7 @@ namespace aclorch_test
             gIntfsOrch = new IntfsOrch(m_app_db.get(), APP_INTF_TABLE_NAME, gVrfOrch, m_global_app_db.get());
 
             ASSERT_EQ(gNeighOrch, nullptr);
-            gNeighOrch = new NeighOrch(m_app_db.get(), APP_NEIGH_TABLE_NAME, gIntfsOrch);
+            gNeighOrch = new NeighOrch(m_app_db.get(), APP_NEIGH_TABLE_NAME, gIntfsOrch, m_global_app_db.get());
 
             ASSERT_EQ(gRouteOrch, nullptr);
             gRouteOrch = new RouteOrch(m_app_db.get(), APP_ROUTE_TABLE_NAME, gSwitchOrch, gNeighOrch, gIntfsOrch, gVrfOrch);
