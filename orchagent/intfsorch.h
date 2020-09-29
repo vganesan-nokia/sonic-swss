@@ -32,7 +32,7 @@ typedef map<string, IntfsEntry> IntfsTable;
 class IntfsOrch : public Orch
 {
 public:
-    IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch, DBConnector *globalAppDb);
+    IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch, DBConnector *chassisAppDb);
 
     sai_object_id_t getRouterIntfsId(const string&);
     bool isPrefixSubnet(const IpPrefix&, const string&);
@@ -98,8 +98,8 @@ private:
     bool setIntfProxyArp(const string &alias, const string &proxy_arp);
 
     unique_ptr<Table> m_tableVoqSystemInterfaceTable;
-    bool voqSyncAddIntf(string &alias, sai_object_id_t &rif_id);
-    bool voqSyncDelIntf(string &alias);
+    void voqSyncAddIntf(string &alias);
+    void voqSyncDelIntf(string &alias);
 
 };
 

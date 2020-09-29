@@ -55,7 +55,7 @@ static const vector<sai_router_interface_stat_t> rifStatIds =
     SAI_ROUTER_INTERFACE_STAT_OUT_ERROR_OCTETS,
 };
 
-IntfsOrch::IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch, DBConnector *globalAppDb) :
+IntfsOrch::IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch, DBConnector *chassisAppDb) :
         Orch(db, tableName, intfsorch_pri), m_vrfOrch(vrf_orch)
 {
     SWSS_LOG_ENTER();
@@ -103,9 +103,9 @@ IntfsOrch::IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch, DBCon
     if(gMySwitchType == "voq")
     {
         //Add subscriber to process VOQ system interface
-        tableName = VOQ_SYSTEM_INTERFACE_TABLE_NAME;
-        Orch::addExecutor(new Consumer(new SubscriberStateTable(globalAppDb, tableName, TableConsumable::DEFAULT_POP_BATCH_SIZE, 0), this, tableName));
-        m_tableVoqSystemInterfaceTable = unique_ptr<Table>(new Table(globalAppDb, VOQ_SYSTEM_INTERFACE_TABLE_NAME));
+        tableName = CHASSIS_APP_SYSTEM_INTERFACE_TABLE_NAME;
+        Orch::addExecutor(new Consumer(new SubscriberStateTable(chassisAppDb, tableName, TableConsumable::DEFAULT_POP_BATCH_SIZE, 0), this, tableName));
+        m_tableVoqSystemInterfaceTable = unique_ptr<Table>(new Table(chassisAppDb, CHASSIS_APP_SYSTEM_INTERFACE_TABLE_NAME));
     }
 
 }
@@ -552,7 +552,7 @@ void IntfsOrch::doTask(Consumer &consumer)
             ip_prefix_in_key = true;
         }
 
-        if(table_name == VOQ_SYSTEM_INTERFACE_TABLE_NAME)
+        if(table_name == CHASSIS_APP_SYSTEM_INTERFACE_TABLE_NAME)
         {
             if(!isRemoteSystemPortIntf(alias))
             {
@@ -1038,8 +1038,8 @@ bool IntfsOrch::addRouterIntfs(sai_object_id_t vrf_id, Port &port)
 
     if(gMySwitchType == "voq")
     {
-        //Sync the interface to add to the SYSTEM_INTERFACE table of GLOBAL_APP_DB
-        voqSyncAddIntf(port.m_alias, port.m_rif_id);
+        //Sync the interface to add to the SYSTEM_INTERFACE table of CHASSIS_APP_DB
+        voqSyncAddIntf(port.m_alias);
     }
 
     return true;
@@ -1074,7 +1074,7 @@ bool IntfsOrch::removeRouterIntfs(Port &port)
 
     if(gMySwitchType == "voq")
     {
-        //Sync the interface to del from the SYSTEM_INTERFACE table of GLOBAL_APP_DB
+        //Sync the interface to del from the SYSTEM_INTERFACE table of CHASSIS_APP_DB
         voqSyncDelIntf(port.m_alias);
     }
 
@@ -1338,76 +1338,51 @@ bool IntfsOrch::isRemoteSystemPortIntf(string alias)
     return false;
 }
 
-bool IntfsOrch::voqSyncAddIntf(string &alias, sai_object_id_t &rif_id)
+void IntfsOrch::voqSyncAddIntf(string &alias)
 {
     //Sync only local interface. Confirm for the local interface and
-    //get the system port alias for key for syncing
+    //get the system port alias for key for syncing to CHASSIS_APP_DB
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
         if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
         {
-            return true;
+            return;
         }
         alias = port.m_system_port_info.alias;
     }
     else
     {
         SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
-        return false;
+        return;
     }
 
-    //Get router interface to make sure it exists
-    sai_attribute_t attr;
-    sai_status_t status;
+    FieldValueTuple nullFv ("NULL", "NULL");
+    vector<FieldValueTuple> attrs;
+    attrs.push_back(nullFv);
 
-    attr.id = SAI_ROUTER_INTERFACE_ATTR_PORT_ID;
-
-    status = sai_router_intfs_api->get_router_interface_attribute(rif_id, 1, &attr);
-    if (status != SAI_STATUS_SUCCESS)
-    {
-        SWSS_LOG_ERROR("Failed to get rif for %s:0x%lx, rv:%d", alias.c_str(), rif_id, status);
-        return false;
-    }
-
-    //Get the Real ID of the RIF ID
-    string value;
-    const auto id = sai_serialize_object_id(rif_id);
-
-    if (m_vidToRidTable->hget("", id, value))
-    {
-        FieldValueTuple rifIdFv ("rif_id", value);
-        vector<FieldValueTuple> attrs;
-        attrs.push_back(rifIdFv);
-
-        m_tableVoqSystemInterfaceTable->set(alias, attrs);
-        return true;
-    }
-    SWSS_LOG_ERROR("Failed to get real ID from ASIC DB for RIF id 0x%lx of %s", rif_id, alias.c_str());
-    return false;
+    m_tableVoqSystemInterfaceTable->set(alias, attrs);
 }
 
-bool IntfsOrch::voqSyncDelIntf(string &alias)
+void IntfsOrch::voqSyncDelIntf(string &alias)
 {
     //Sync only local interface. Confirm for the local interface and
-    //get the system port alias for key for syncing to GLOBAL_APP_DB
+    //get the system port alias for key for syncing to CHASSIS_APP_DB
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
         if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
         {
-            return true;
+            return;
         }
         alias = port.m_system_port_info.alias;
     }
     else
     {
         SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
-        return false;
+        return;
     }
 
     m_tableVoqSystemInterfaceTable->del(alias);
-
-    return true;
 }
 

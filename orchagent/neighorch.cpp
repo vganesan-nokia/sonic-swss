@@ -7,6 +7,8 @@
 #include "subscriberstatetable.h"
 #include "exec.h"
 
+#define IP_CMD               "/sbin/ip"
+
 extern sai_neighbor_api_t*         sai_neighbor_api;
 extern sai_next_hop_api_t*         sai_next_hop_api;
 
@@ -18,7 +20,7 @@ extern string gMySwitchType;
 
 const int neighorch_pri = 30;
 
-NeighOrch::NeighOrch(DBConnector *db, string tableName, IntfsOrch *intfsOrch, DBConnector *globalAppDb) :
+NeighOrch::NeighOrch(DBConnector *db, string tableName, IntfsOrch *intfsOrch, DBConnector *chassisAppDb) :
         Orch(db, tableName, neighorch_pri), m_intfsOrch(intfsOrch)
 {
     SWSS_LOG_ENTER();
@@ -26,9 +28,9 @@ NeighOrch::NeighOrch(DBConnector *db, string tableName, IntfsOrch *intfsOrch, DB
     if(gMySwitchType == "voq")
     {
         //Add subscriber to process VOQ system neigh
-        tableName = VOQ_SYSTEM_NEIGH_TABLE_NAME;
-        Orch::addExecutor(new Consumer(new SubscriberStateTable(globalAppDb, tableName, TableConsumable::DEFAULT_POP_BATCH_SIZE, 0), this, tableName));
-        m_tableVoqSystemNeighTable = unique_ptr<Table>(new Table(globalAppDb, VOQ_SYSTEM_NEIGH_TABLE_NAME));
+        tableName = CHASSIS_APP_SYSTEM_NEIGH_TABLE_NAME;
+        Orch::addExecutor(new Consumer(new SubscriberStateTable(chassisAppDb, tableName, TableConsumable::DEFAULT_POP_BATCH_SIZE, 0), this, tableName));
+        m_tableVoqSystemNeighTable = unique_ptr<Table>(new Table(chassisAppDb, CHASSIS_APP_SYSTEM_NEIGH_TABLE_NAME));
     }
 }
 
@@ -54,10 +56,10 @@ bool NeighOrch::addNextHop(const IpAddress &ipAddress, const string &alias)
     {
         //For remote system ports kernel nexthops are always on inband. Change the key
         Port inbp;
-        if(gPortsOrch->getInbandPort(inbp))
-        {
-            nexthop.alias = inbp.m_alias;
-        }
+        gPortsOrch->getInbandPort(inbp);
+        assert(inbp.m_alias.length());
+
+        nexthop.alias = inbp.m_alias;
     }
     assert(!hasNextHop(nexthop));
     sai_object_id_t rif_id = m_intfsOrch->getRouterIntfsId(alias);
@@ -238,10 +240,10 @@ bool NeighOrch::removeNextHop(const IpAddress &ipAddress, const string &alias)
     {
         //For remote system ports kernel nexthops are always on inband. Change the key
         Port inbp;
-        if(gPortsOrch->getInbandPort(inbp))
-        {
-            nexthop.alias = inbp.m_alias;
-        }
+        gPortsOrch->getInbandPort(inbp);
+        assert(inbp.m_alias.length());
+
+        nexthop.alias = inbp.m_alias;
     }
 
     assert(hasNextHop(nexthop));
@@ -324,7 +326,7 @@ void NeighOrch::doTask(Consumer &consumer)
     }
 
     string table_name = consumer.getTableName();
-    if(table_name == VOQ_SYSTEM_NEIGH_TABLE_NAME)
+    if(table_name == CHASSIS_APP_SYSTEM_NEIGH_TABLE_NAME)
     {
         doVoqSystemNeighTask(consumer);
         return;
@@ -356,10 +358,17 @@ void NeighOrch::doTask(Consumer &consumer)
 
         if(gPortsOrch->isInbandPort(alias))
         {
-            //This is the neigh learned due to the kernel entry added on
-            //Inband interface for the remote system port neighbors. Skip
-            it = consumer.m_toSync.erase(it);
-            continue;
+            Port ibport;
+            gPortsOrch->getInbandPort(ibport);
+            if(ibport.m_type != Port::VLAN)
+            {
+                //For "port" type Inband, the neighbors are only remote neighbors.
+                //Hence, this is the neigh learned due to the kernel entry added on
+                //Inband interface for the remote system port neighbors. Skip
+                it = consumer.m_toSync.erase(it);
+                continue;
+            }
+            //For "vlan" type inband, may identify the remote neighbors and skip
         }
 
         IpAddress ip_address(key.substr(found+1));
@@ -535,7 +544,7 @@ bool NeighOrch::addNeighbor(const NeighborEntry &neighborEntry, const MacAddress
 
     if(gMySwitchType == "voq")
     {
-        //Sync the neighbor to add to the GLOBAL_APP_DB
+        //Sync the neighbor to add to the CHASSIS_APP_DB
         voqSyncAddNeigh(alias, ip_address, macAddress, neighbor_entry);
     }
 
@@ -555,10 +564,10 @@ bool NeighOrch::removeNeighbor(const NeighborEntry &neighborEntry)
     {
         //For remote system ports kernel nexthops are always on inband. Change the key
         Port inbp;
-        if(gPortsOrch->getInbandPort(inbp))
-        {
-            nexthop.alias = inbp.m_alias;
-        }
+        gPortsOrch->getInbandPort(inbp);
+        assert(inbp.m_alias.length());
+
+        nexthop.alias = inbp.m_alias;
     }
 
     if (m_syncdNeighbors.find(neighborEntry) == m_syncdNeighbors.end())
@@ -652,7 +661,7 @@ bool NeighOrch::removeNeighbor(const NeighborEntry &neighborEntry)
 
     if(gMySwitchType == "voq")
     {
-        //Sync the neighbor to delete from the GLOBAL_APP_DB
+        //Sync the neighbor to delete from the CHASSIS_APP_DB
         voqSyncDelNeigh(alias, ip_address);
     }
 
@@ -864,20 +873,23 @@ bool NeighOrch::addVoqEncapIndex(string &alias, IpAddress &ip, vector<sai_attrib
     uint32_t encap_index = 0;
     string appKey = alias + ":" + ip.to_string();
 
-    if(getSystemPortNeighEncapIndex(appKey, encap_index))
+    if(gIntfsOrch->isRemoteSystemPortIntf(alias))
     {
-        attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX;
-        attr.value.u32 = encap_index;
-        neighbor_attrs.push_back(attr);
+        if(getSystemPortNeighEncapIndex(appKey, encap_index))
+        {
+            attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX;
+            attr.value.u32 = encap_index;
+            neighbor_attrs.push_back(attr);
 
-        attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_IMPOSE_INDEX;
-        attr.value.booldata = true;
-        neighbor_attrs.push_back(attr);
-    }
-    else
-    {
-        //No Encap index available. Check if remote system port
-        if(gIntfsOrch->isRemoteSystemPortIntf(alias))
+            attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_IMPOSE_INDEX;
+            attr.value.booldata = true;
+            neighbor_attrs.push_back(attr);
+
+            attr.id = SAI_NEIGHBOR_ENTRY_ATTR_IS_LOCAL;
+            attr.value.booldata = false;
+            neighbor_attrs.push_back(attr);
+        }
+        else
         {
             //Encap index not available and the interface is remote. Return false to re-try
             SWSS_LOG_NOTICE("System port neighbor encap index is not available for remote neighbor %s. Re-try!", appKey.c_str());
@@ -888,26 +900,26 @@ bool NeighOrch::addVoqEncapIndex(string &alias, IpAddress &ip, vector<sai_attrib
     return true;
 }
 
-bool NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacAddress &mac, sai_neighbor_entry_t &neighbor_entry)
+void NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacAddress &mac, sai_neighbor_entry_t &neighbor_entry)
 {
     sai_attribute_t attr;
     sai_status_t status;
 
     //Sync only local neigh. Confirm for the local neigh and
-    //get the system port alias for key for syncing to GLOBAL_APP_DB
+    //get the system port alias for key for syncing to CHASSIS_APP_DB
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
         if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
         {
-            return true;
+            return;
         }
         alias = port.m_system_port_info.alias;
     }
     else
     {
         SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
-        return false;
+        return;
     }
 
     attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX;
@@ -916,7 +928,13 @@ bool NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacA
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to get neighbor attribute for %s on %s, rv:%d", ip_address.to_string().c_str(), alias.c_str(), status);
-        return false;
+        return;
+    }
+
+    if (!attr.value.u32)
+    {
+        SWSS_LOG_ERROR("Invalid neighbor encap_index for %s on %s", ip_address.to_string().c_str(), alias.c_str());
+        return;
     }
 
     vector<FieldValueTuple> attrs;
@@ -929,33 +947,29 @@ bool NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacA
 
     string key = alias + ":" + ip_address.to_string();
     m_tableVoqSystemNeighTable->set(key, attrs);
-
-    return true;
 }
 
-bool NeighOrch::voqSyncDelNeigh(string &alias, IpAddress &ip_address)
+void NeighOrch::voqSyncDelNeigh(string &alias, IpAddress &ip_address)
 {
     //Sync only local neigh. Confirm for the local neigh and
-    //get the system port alias for key for syncing to GLOBAL_APP_DB
+    //get the system port alias for key for syncing to CHASSIS_APP_DB
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
         if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
         {
-            return true;
+            return;
         }
         alias = port.m_system_port_info.alias;
     }
     else
     {
         SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
-        return false;
+        return;
     }
 
     string key = alias + ":" + ip_address.to_string();
     m_tableVoqSystemNeighTable->del(key);
-
-    return true;
 }
 
 bool NeighOrch::addKernelRoute(string odev, IpAddress ip_addr)
@@ -968,12 +982,12 @@ bool NeighOrch::addKernelRoute(string odev, IpAddress ip_addr)
 
     if(ip_addr.isV4())
     {
-        cmd = "ip route add " + ip_str + "/32 dev " + odev;
+        cmd = string("") + IP_CMD + " route add " + ip_str + "/32 dev " + odev;
         SWSS_LOG_NOTICE("IPv4 Route Add cmd: %s",cmd.c_str());
     }
     else
     {
-        cmd = "ip -6 route add " + ip_str + "/128 dev " + odev;
+        cmd = string("") + IP_CMD + " -6 route add " + ip_str + "/128 dev " + odev;
         SWSS_LOG_NOTICE("IPv6 Route Add cmd: %s",cmd.c_str());
     }
 
@@ -1000,12 +1014,12 @@ bool NeighOrch::delKernelRoute(IpAddress ip_addr)
 
     if(ip_addr.isV4())
     {
-        cmd = "ip route del " + ip_str + "/32";
+        cmd = string("") + IP_CMD + " route del " + ip_str + "/32";
         SWSS_LOG_NOTICE("IPv4 Route Del cmd: %s",cmd.c_str());
     }
     else
     {
-        cmd = "ip -6 route del " + ip_str + "/128";
+        cmd = string("") + IP_CMD + " -6 route del " + ip_str + "/128";
         SWSS_LOG_NOTICE("IPv6 Route Del cmd: %s",cmd.c_str());
     }
 
@@ -1032,12 +1046,12 @@ bool NeighOrch::addKernelNeigh(string odev, IpAddress ip_addr, MacAddress mac_ad
 
     if(ip_addr.isV4())
     {
-        cmd = "arp -s " + ip_str + " " + mac_str + " -i " + odev;
+        cmd = string("") + IP_CMD + " neigh add " + ip_str + " lladdr " + mac_str + " dev " + odev;
         SWSS_LOG_NOTICE("IPv4 Nbr Add cmd: %s",cmd.c_str());
     }
     else
     {
-        cmd = "ip -6 neigh add " + ip_str + " lladdr " + mac_str + " dev " + odev;
+        cmd = string("") + IP_CMD + " -6 neigh add " + ip_str + " lladdr " + mac_str + " dev " + odev;
         SWSS_LOG_NOTICE("IPv6 Nbr Add cmd: %s",cmd.c_str());
     }
 
@@ -1064,13 +1078,13 @@ bool NeighOrch::delKernelNeigh(string odev, IpAddress ip_addr)
 
     if(ip_addr.isV4())
     {
-        cmd = "arp -d " + ip_str + " -i " + odev;
+        cmd = string("") + IP_CMD + " neigh del " + ip_str + " dev " + odev;
         SWSS_LOG_NOTICE("IPv4 Nbr Del cmd: %s",cmd.c_str());
     }
     else
     {
-        cmd = "ip -6 neigh del " + ip_str + " dev " + odev;
-        SWSS_LOG_NOTICE("IPv4 Nbr Del cmd: %s",cmd.c_str());
+        cmd = string("") + IP_CMD + " -6 neigh del " + ip_str + " dev " + odev;
+        SWSS_LOG_NOTICE("IPv6 Nbr Del cmd: %s",cmd.c_str());
     }
 
     int32_t ret = swss::exec(cmd, res);

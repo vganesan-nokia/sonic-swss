@@ -51,7 +51,7 @@ private:
     DBConnector *m_applDb;
     DBConnector *m_configDb;
     DBConnector *m_stateDb;
-    DBConnector *m_globalAppDb;
+    DBConnector *m_chassisAppDb;
 
     std::vector<Orch *> m_orchList;
     Select *m_select;

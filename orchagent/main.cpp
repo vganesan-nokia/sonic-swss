@@ -382,11 +382,6 @@ int main(int argc, char **argv)
         attrs.push_back(attr);
     }
 
-    /* Must be last Attribute */
-    attr.id = SAI_REDIS_SWITCH_ATTR_CONTEXT;
-    attr.value.u64 = gSwitchId;
-    attrs.push_back(attr);
-
     // SAI_REDIS_SWITCH_ATTR_SYNC_MODE attribute only setBuffer and g_syncMode to true
     // since it is not using ASIC_DB, we can execute it before create_switch
     // when g_syncMode is set to true here, create_switch will wait the response from syncd
@@ -434,6 +429,11 @@ int main(int argc, char **argv)
             }
         }
     }
+
+    /* Must be last Attribute */
+    attr.id = SAI_REDIS_SWITCH_ATTR_CONTEXT;
+    attr.value.u64 = gSwitchId;
+    attrs.push_back(attr);
 
     status = sai_switch_api->create_switch(&gSwitchId, (uint32_t)attrs.size(), attrs.data());
     if (status != SAI_STATUS_SUCCESS)
@@ -518,17 +518,17 @@ int main(int argc, char **argv)
     DBConnector config_db("CONFIG_DB", 0);
     DBConnector state_db("STATE_DB", 0);
 
-    shared_ptr<DBConnector> global_app_db;
+    shared_ptr<DBConnector> chassis_app_db;
     if(gMySwitchType == "voq")
     {
-        //Connection for GLOBAL_APP_DB in redis-server in control/supervisor card as per
+        //Connection for CHASSIS_APP_DB in redis-server in control/supervisor card as per
         //connection info in database_config.json
-        global_app_db = make_shared<DBConnector>("GLOBAL_APP_DB", 0, true);
+        chassis_app_db = make_shared<DBConnector>("CHASSIS_APP_DB", 0, true);
     }
 
     init_gearbox_phys(&appl_db);
 
-    auto orchDaemon = make_shared<OrchDaemon>(&appl_db, &config_db, &state_db, global_app_db.get());
+    auto orchDaemon = make_shared<OrchDaemon>(&appl_db, &config_db, &state_db, chassis_app_db.get());
 
     if (!orchDaemon->init())
     {

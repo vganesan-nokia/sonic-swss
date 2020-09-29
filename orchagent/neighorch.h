@@ -35,7 +35,7 @@ struct NeighborUpdate
 class NeighOrch : public Orch, public Subject
 {
 public:
-    NeighOrch(DBConnector *db, string tableName, IntfsOrch *intfsOrch, DBConnector *globalAppDb);
+    NeighOrch(DBConnector *db, string tableName, IntfsOrch *intfsOrch, DBConnector *chassisAppDb);
 
     bool hasNextHop(const NextHopKey&);
 
@@ -78,8 +78,8 @@ private:
     bool delKernelRoute(IpAddress ip_addr);
     bool addKernelNeigh(string odev, IpAddress ip_addr, MacAddress mac_addr);
     bool delKernelNeigh(string odev, IpAddress ip_addr);
-    bool voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacAddress &mac, sai_neighbor_entry_t &neighbor_entry);
-    bool voqSyncDelNeigh(string &alias, IpAddress &ip_address);
+    void voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacAddress &mac, sai_neighbor_entry_t &neighbor_entry);
+    void voqSyncDelNeigh(string &alias, IpAddress &ip_address);
 };
 
 #endif /* SWSS_NEIGHORCH_H */
