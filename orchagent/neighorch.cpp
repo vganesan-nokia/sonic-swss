@@ -5,9 +5,6 @@
 #include "crmorch.h"
 #include "routeorch.h"
 #include "subscriberstatetable.h"
-#include "exec.h"
-
-#define IP_CMD               "/sbin/ip"
 
 extern sai_neighbor_api_t*         sai_neighbor_api;
 extern sai_next_hop_api_t*         sai_next_hop_api;
@@ -31,6 +28,11 @@ NeighOrch::NeighOrch(DBConnector *db, string tableName, IntfsOrch *intfsOrch, DB
         tableName = CHASSIS_APP_SYSTEM_NEIGH_TABLE_NAME;
         Orch::addExecutor(new Consumer(new SubscriberStateTable(chassisAppDb, tableName, TableConsumable::DEFAULT_POP_BATCH_SIZE, 0), this, tableName));
         m_tableVoqSystemNeighTable = unique_ptr<Table>(new Table(chassisAppDb, CHASSIS_APP_SYSTEM_NEIGH_TABLE_NAME));
+
+        //STATE DB connection for setting state of the remote neighbor SAI programming
+        unique_ptr<DBConnector> stateDb;
+        stateDb = make_unique<DBConnector>("STATE_DB", 0);
+        m_stateSystemNeighTable = unique_ptr<Table>(new Table(stateDb.get(), STATE_SYSTEM_NEIGH_TABLE_NAME));
     }
 }
 
@@ -673,14 +675,12 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
     SWSS_LOG_ENTER();
 
     //Local inband port as the outgoing interface of the static neighbor and static route
-    Port port;
-    if(!gPortsOrch->getInbandPort(port))
+    Port ibif;
+    if(!gPortsOrch->getInbandPort(ibif))
     {
         //Inband port is not ready yet.
         return;
     }
-    string nbr_odev = port.m_alias;
-    MacAddress inband_mac = gMacAddress;
 
     auto it = consumer.m_toSync.begin();
     while (it != consumer.m_toSync.end())
@@ -689,7 +689,7 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
         string key = kfvKey(t);
         string op = kfvOp(t);
 
-        size_t found = key.find(':');
+        size_t found = key.find_last_of(consumer.getConsumerTable()->getTableNameSeparator().c_str());
         if (found == string::npos)
         {
             SWSS_LOG_ERROR("Failed to parse key %s", key.c_str());
@@ -709,6 +709,8 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
         IpAddress ip_address(key.substr(found+1));
 
         NeighborEntry neighbor_entry = { ip_address, alias };
+
+        string state_key = alias + state_db_key_delimiter + ip_address.to_string();
 
         if (op == SET_COMMAND)
         {
@@ -751,38 +753,27 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
 
             if (m_syncdNeighbors.find(neighbor_entry) == m_syncdNeighbors.end() || m_syncdNeighbors[neighbor_entry] != mac_address)
             {
-                if (!addKernelNeigh(nbr_odev, ip_address, inband_mac))
-                {
-                    SWSS_LOG_ERROR("Neigh entry add on dev %s failed for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
-                    it++;
-                    continue;
-                }
-                else
-                {
-                    SWSS_LOG_NOTICE("Neigh entry added on dev %s for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
-                }
-
-                if (!addKernelRoute(nbr_odev, ip_address))
-                {
-                    SWSS_LOG_ERROR("Route entry add on dev %s failed for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
-                    delKernelNeigh(nbr_odev, ip_address);
-                    it++;
-                    continue;
-                }
-                else
-                {
-                    SWSS_LOG_NOTICE("Route entry added on dev %s for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
-                }
-                SWSS_LOG_NOTICE("Added voq neighbor %s to kernel", kfvKey(t).c_str());
-
                 //Add neigh to SAI
                 if (addNeighbor(neighbor_entry, mac_address))
+                {
+                    //neigh successfully added to SAI. Set STATE DB to signal kernel programming by neighbor manager
+
+                    //If the inband interface type is not VLAN, same MAC can be used for the inband interface for
+                    //kernel programming.
+                    if(ibif.m_type != Port::VLAN)
+                    {
+                        mac_address = gMacAddress;
+                    }
+                    vector<FieldValueTuple> fvVector;
+                    FieldValueTuple mac("neigh", mac_address.to_string());
+                    fvVector.push_back(mac);
+                    m_stateSystemNeighTable->set(state_key, fvVector);
+
                     it = consumer.m_toSync.erase(it);
+                }
                 else
                 {
                     SWSS_LOG_ERROR("Failed to add voq neighbor %s to SAI", kfvKey(t).c_str());
-                    delKernelRoute(ip_address);
-                    delKernelNeigh(nbr_odev, ip_address);
                     it++;
                 }
             }
@@ -794,28 +785,12 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
         {
             if (m_syncdNeighbors.find(neighbor_entry) != m_syncdNeighbors.end())
             {
-                if (!delKernelRoute(ip_address))
-                {
-                    SWSS_LOG_ERROR("Route entry on dev %s delete failed for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
-                }
-                else
-                {
-                    SWSS_LOG_NOTICE("Route entry on dev %s deleted for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
-                }
-
-                if (!delKernelNeigh(nbr_odev, ip_address))
-                {
-                    SWSS_LOG_ERROR("Neigh entry on dev %s delete failed for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
-                }
-                else
-                {
-                    SWSS_LOG_NOTICE("Neigh entry on dev %s deleted for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
-                }
-                SWSS_LOG_DEBUG("Deleted voq neighbor %s from kernel", kfvKey(t).c_str());
-
                 //Remove neigh from SAI
                 if (removeNeighbor(neighbor_entry))
                 {
+                    //neigh successfully deleted from SAI. Set STATE DB to signal to remove entries from kernel
+                    m_stateSystemNeighTable->del(state_key);
+
                     it = consumer.m_toSync.erase(it);
                 }
                 else
@@ -839,12 +814,12 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
 bool NeighOrch::addInbandNeighbor(string alias, IpAddress ip_address)
 {
     //For "port" type inband, the inband reachability info syncing can be done through static
-    //configureation or GLOBAL_APP_DB sync (this function)
+    //configureation or CHASSIS_APP_DB sync (this function)
 
     //For "vlan" type inband, the inband reachability info syncinng can be ARP learning of other
-    //asics inband or static configuration or through GLOBAL_APP_DB sync (this function)
+    //asics inband or static configuration or through CHASSIS_APP_DB sync (this function)
 
-    //May implement inband rechability info syncing through GLOBAL_APP_DB sync here
+    //May implement inband rechability info syncing through CHASSIS_APP_DB sync here
 
     return true;
 }
@@ -856,10 +831,12 @@ bool NeighOrch::delInbandNeighbor(string alias, IpAddress ip_address)
     return true;
 }
 
-bool NeighOrch::getSystemPortNeighEncapIndex(string alias, uint32_t &encap_index)
+bool NeighOrch::getSystemPortNeighEncapIndex(string &alias, IpAddress &ip, uint32_t &encap_index)
 {
     string value;
-    if(m_tableVoqSystemNeighTable->hget(alias, "encap_index", value))
+    string key = alias + m_tableVoqSystemNeighTable->getTableNameSeparator().c_str() + ip.to_string();
+
+    if(m_tableVoqSystemNeighTable->hget(key, "encap_index", value))
     {
         encap_index = (uint32_t) stoul(value);
         return true;
@@ -871,11 +848,10 @@ bool NeighOrch::addVoqEncapIndex(string &alias, IpAddress &ip, vector<sai_attrib
 {
     sai_attribute_t attr;
     uint32_t encap_index = 0;
-    string appKey = alias + ":" + ip.to_string();
 
     if(gIntfsOrch->isRemoteSystemPortIntf(alias))
     {
-        if(getSystemPortNeighEncapIndex(appKey, encap_index))
+        if(getSystemPortNeighEncapIndex(alias, ip, encap_index))
         {
             attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX;
             attr.value.u32 = encap_index;
@@ -892,7 +868,7 @@ bool NeighOrch::addVoqEncapIndex(string &alias, IpAddress &ip, vector<sai_attrib
         else
         {
             //Encap index not available and the interface is remote. Return false to re-try
-            SWSS_LOG_NOTICE("System port neighbor encap index is not available for remote neighbor %s. Re-try!", appKey.c_str());
+            SWSS_LOG_NOTICE("System port neigh encap index not available for %s|%s!", alias.c_str(), ip.to_string().c_str());
             return false;
         }
     }
@@ -945,7 +921,7 @@ void NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacA
     FieldValueTuple macFv ("neigh", mac.to_string());
     attrs.push_back(macFv);
 
-    string key = alias + ":" + ip_address.to_string();
+    string key = alias + m_tableVoqSystemNeighTable->getTableNameSeparator().c_str() + ip_address.to_string();
     m_tableVoqSystemNeighTable->set(key, attrs);
 }
 
@@ -968,134 +944,6 @@ void NeighOrch::voqSyncDelNeigh(string &alias, IpAddress &ip_address)
         return;
     }
 
-    string key = alias + ":" + ip_address.to_string();
+    string key = alias + m_tableVoqSystemNeighTable->getTableNameSeparator().c_str() + ip_address.to_string();
     m_tableVoqSystemNeighTable->del(key);
-}
-
-bool NeighOrch::addKernelRoute(string odev, IpAddress ip_addr)
-{
-    string cmd, res;
-
-    SWSS_LOG_ENTER();
-
-    string ip_str = ip_addr.to_string();
-
-    if(ip_addr.isV4())
-    {
-        cmd = string("") + IP_CMD + " route add " + ip_str + "/32 dev " + odev;
-        SWSS_LOG_NOTICE("IPv4 Route Add cmd: %s",cmd.c_str());
-    }
-    else
-    {
-        cmd = string("") + IP_CMD + " -6 route add " + ip_str + "/128 dev " + odev;
-        SWSS_LOG_NOTICE("IPv6 Route Add cmd: %s",cmd.c_str());
-    }
-
-    int32_t ret = swss::exec(cmd, res);
-
-    if(ret)
-    {
-        /* Just log error and return */
-        SWSS_LOG_ERROR("Failed to add route for %s, error: %d", ip_str.c_str(), ret);
-        return false;
-    }
-
-    SWSS_LOG_INFO("Added route for %s on device %s", ip_str.c_str(), odev.c_str());
-    return true;
-}
-
-bool NeighOrch::delKernelRoute(IpAddress ip_addr)
-{
-    string cmd, res;
-
-    SWSS_LOG_ENTER();
-
-    string ip_str = ip_addr.to_string();
-
-    if(ip_addr.isV4())
-    {
-        cmd = string("") + IP_CMD + " route del " + ip_str + "/32";
-        SWSS_LOG_NOTICE("IPv4 Route Del cmd: %s",cmd.c_str());
-    }
-    else
-    {
-        cmd = string("") + IP_CMD + " -6 route del " + ip_str + "/128";
-        SWSS_LOG_NOTICE("IPv6 Route Del cmd: %s",cmd.c_str());
-    }
-
-    int32_t ret = swss::exec(cmd, res);
-
-    if(ret)
-    {
-        /* Just log error and return */
-        SWSS_LOG_ERROR("Failed to delete route for %s, error: %d", ip_str.c_str(), ret);
-        return false;
-    }
-
-    SWSS_LOG_INFO("Deleted route for %s", ip_str.c_str());
-    return true;
-}
-
-bool NeighOrch::addKernelNeigh(string odev, IpAddress ip_addr, MacAddress mac_addr)
-{
-    SWSS_LOG_ENTER();
-
-    string cmd, res;
-    string ip_str = ip_addr.to_string();
-    string mac_str = mac_addr.to_string();
-
-    if(ip_addr.isV4())
-    {
-        cmd = string("") + IP_CMD + " neigh add " + ip_str + " lladdr " + mac_str + " dev " + odev;
-        SWSS_LOG_NOTICE("IPv4 Nbr Add cmd: %s",cmd.c_str());
-    }
-    else
-    {
-        cmd = string("") + IP_CMD + " -6 neigh add " + ip_str + " lladdr " + mac_str + " dev " + odev;
-        SWSS_LOG_NOTICE("IPv6 Nbr Add cmd: %s",cmd.c_str());
-    }
-
-    int32_t ret = swss::exec(cmd, res);
-
-    if(ret)
-    {
-        /* Just log error and return */
-        SWSS_LOG_ERROR("Failed to add Nbr for %s, error: %d", ip_str.c_str(), ret);
-        return false;
-    }
-
-    SWSS_LOG_INFO("Added Nbr for %s on interface %s", ip_str.c_str(), odev.c_str());
-    return true;
-}
-
-bool NeighOrch::delKernelNeigh(string odev, IpAddress ip_addr)
-{
-    string cmd, res;
-
-    SWSS_LOG_ENTER();
-
-    string ip_str = ip_addr.to_string();
-
-    if(ip_addr.isV4())
-    {
-        cmd = string("") + IP_CMD + " neigh del " + ip_str + " dev " + odev;
-        SWSS_LOG_NOTICE("IPv4 Nbr Del cmd: %s",cmd.c_str());
-    }
-    else
-    {
-        cmd = string("") + IP_CMD + " -6 neigh del " + ip_str + " dev " + odev;
-        SWSS_LOG_NOTICE("IPv6 Nbr Del cmd: %s",cmd.c_str());
-    }
-
-    int32_t ret = swss::exec(cmd, res);
-
-    if(ret)
-    {
-        /* Just log error and return */
-        SWSS_LOG_ERROR("Failed to delete Nbr for %s, error: %d", ip_str.c_str(), ret);
-        return false;
-    }
-
-    SWSS_LOG_INFO("Deleted Nbr for %s on interface %s", ip_str.c_str(), odev.c_str());
-    return true;
 }

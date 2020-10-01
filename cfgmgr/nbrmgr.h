@@ -27,6 +27,13 @@ private:
     bool setNeighbor(const std::string& alias, const IpAddress& ip, const MacAddress& mac);
 
     void doTask(Consumer &consumer);
+    void doStateSystemNeighTask(Consumer &consumer);
+    bool getVoqInbandInterfaceName(string &nbr_odev);
+    bool addKernelRoute(string odev, IpAddress ip_addr);
+    bool delKernelRoute(IpAddress ip_addr);
+    bool addKernelNeigh(string odev, IpAddress ip_addr, MacAddress mac_addr);
+    bool delKernelNeigh(string odev, IpAddress ip_addr);
+    unique_ptr<Table> m_cfgVoqInbandInterfaceTable;
 
     Table m_statePortTable, m_stateLagTable, m_stateVlanTable, m_stateIntfTable, m_stateNeighRestoreTable;
     struct nl_sock *m_nl_sock;

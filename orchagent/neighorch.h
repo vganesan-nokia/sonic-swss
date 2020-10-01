@@ -72,12 +72,9 @@ private:
     void doVoqSystemNeighTask(Consumer &consumer);
 
     unique_ptr<Table> m_tableVoqSystemNeighTable;
-    bool getSystemPortNeighEncapIndex(string alias, uint32_t &encap_index);
+    unique_ptr<Table> m_stateSystemNeighTable;
+    bool getSystemPortNeighEncapIndex(string &alias, IpAddress &ip, uint32_t &encap_index);
     bool addVoqEncapIndex(string &alias, IpAddress &ip, vector<sai_attribute_t> &neighbor_attrs);
-    bool addKernelRoute(string odev, IpAddress ip_addr);
-    bool delKernelRoute(IpAddress ip_addr);
-    bool addKernelNeigh(string odev, IpAddress ip_addr, MacAddress mac_addr);
-    bool delKernelNeigh(string odev, IpAddress ip_addr);
     void voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacAddress &mac, sai_neighbor_entry_t &neighbor_entry);
     void voqSyncDelNeigh(string &alias, IpAddress &ip_address);
 };
