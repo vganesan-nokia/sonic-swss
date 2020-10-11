@@ -26,6 +26,7 @@
 #include "countercheckorch.h"
 #include "notifier.h"
 #include "redisclient.h"
+#include "fdborch.h"
 
 extern sai_switch_api_t *sai_switch_api;
 extern sai_bridge_api_t *sai_bridge_api;
@@ -41,6 +42,7 @@ extern IntfsOrch *gIntfsOrch;
 extern NeighOrch *gNeighOrch;
 extern CrmOrch *gCrmOrch;
 extern BufferOrch *gBufferOrch;
+extern FdbOrch *gFdbOrch;
 extern sai_system_port_api_t *sai_system_port_api;
 
 #define VLAN_PREFIX         "Vlan"
@@ -3436,6 +3438,10 @@ bool PortsOrch::removeBridgePort(Port &port)
                 hostif_vlan_tag[SAI_HOSTIF_VLAN_TAG_STRIP], port.m_alias.c_str());
         return false;
     }
+
+    //Flush the FDB entires corresponding to the port
+    gFdbOrch->flushFDBEntries(port.m_bridge_port_id, SAI_NULL_OBJECT_ID);
+    SWSS_LOG_INFO("Flush FDB entries for port %s", port.m_alias.c_str());
 
     /* Remove bridge port */
     status = sai_bridge_api->remove_bridge_port(port.m_bridge_port_id);
