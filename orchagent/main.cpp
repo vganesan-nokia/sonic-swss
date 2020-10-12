@@ -145,66 +145,65 @@ void init_gearbox_phys(DBConnector *applDb)
     delete tmpGearboxTable;
 }
 
-bool getSystemPortConfigList(vector<sai_system_port_config_t> &sysportcfglist)
+bool getCfgSwitchType(DBConnector *cfgDb, string &switch_type)
 {
-    DBConnector cfgDb("CONFIG_DB", 0);
-    DBConnector appDb("APPL_DB", 0);
+    Table cfgDeviceMetaDataTable(cfgDb, CFG_DEVICE_METADATA_TABLE_NAME);
 
-    Table cfgDeviceMetaDataTable(&cfgDb, CFG_DEVICE_METADATA_TABLE_NAME);
-    Table cfgSystemPortTable(&cfgDb, CFG_SYSTEM_PORT_TABLE_NAME);
-    Table appSystemPortTable(&appDb, APP_SYSTEM_PORT_TABLE_NAME);
-
-    //At this point of time (i.e, at the time of orchagent start), the CONFIG_DB is completely fully
-    //populated with the contents of config_db.json.
-
-    string value;
-    //Get the swith type.
-    if(!cfgDeviceMetaDataTable.hget("localhost", "switch_type", value))
+    if (!cfgDeviceMetaDataTable.hget("localhost", "switch_type", switch_type))
     {
         //Switch type is not configured. Consider it default = "switch" (regular switch)
-        value = "switch";
+        switch_type = "switch";
     }
 
-    if(value != "voq" && value != "fabric" && value != "switch")
+    if (switch_type != "voq" && switch_type != "fabric" && switch_type != "switch")
     {
-        cout << "Invalid switch type " << value.c_str() << " configured";
+        cout << "Invalid switch type " << switch_type.c_str() << " configured";
         return false;
     }
-    gMySwitchType = value;
 
-    if(gMySwitchType != "voq")
+    return true;
+}
+
+bool getSystemPortConfigList(DBConnector *cfgDb, DBConnector *appDb, vector<sai_system_port_config_t> &sysportcfglist)
+{
+    Table cfgDeviceMetaDataTable(cfgDb, CFG_DEVICE_METADATA_TABLE_NAME);
+    Table cfgSystemPortTable(cfgDb, CFG_SYSTEM_PORT_TABLE_NAME);
+    Table appSystemPortTable(appDb, APP_SYSTEM_PORT_TABLE_NAME);
+
+    if (gMySwitchType != "voq")
     {
         //Non VOQ switch. Nothing to read
         return true;
     }
 
-    if(!cfgDeviceMetaDataTable.hget("localhost", "switch_id", value))
+    string value;
+    if (!cfgDeviceMetaDataTable.hget("localhost", "switch_id", value))
     {
         //VOQ switch id is not configured.
         cout << "VOQ switch id is not configured";
         return false;
     }
 
-    if(value.size())
+    if (value.size())
         gVoqMySwitchId = stoi(value);
 
-    if(gVoqMySwitchId < 0)
+    if (gVoqMySwitchId < 0)
     {
         cout << "Invalid VOQ switch id " << gVoqMySwitchId << " configured";
         return false;
     }
 
-    if(!cfgDeviceMetaDataTable.hget("localhost", "max_cores", value))
+    if (!cfgDeviceMetaDataTable.hget("localhost", "max_cores", value))
     {
         //VOQ max cores is not configured.
         cout << "VOQ max cores is not configured";
         return false;
     }
 
-    if(value.size())
+    if (value.size())
         gVoqMaxCores = stoi(value);
 
-    if(gVoqMaxCores == 0)
+    if (gVoqMaxCores == 0)
     {
         cout << "Invalid VOQ max cores " << gVoqMaxCores << " configured";
         return false;
@@ -216,35 +215,40 @@ bool getSystemPortConfigList(vector<sai_system_port_config_t> &sysportcfglist)
     //Retrieve system port configurations
     vector<FieldValueTuple> spFv;
     sai_system_port_config_t sysport;
-    for ( auto &k : spKeys )
+    for (auto &k : spKeys)
     {
         cfgSystemPortTable.get(k, spFv);
 
-        for ( auto &fv : spFv )
+        for (auto &fv : spFv)
         {
-            if(fv.first == "switch_id")
+            if (fv.first == "switch_id")
             {
                 sysport.attached_switch_id = stoi(fv.second);
                 continue;
             }
-            if(fv.first == "core_index")
+            if (fv.first == "core_index")
             {
                 sysport.attached_core_index = stoi(fv.second);
                 continue;
             }
-            if(fv.first == "core_port_index")
+            if (fv.first == "core_port_index")
             {
                 sysport.attached_core_port_index = stoi(fv.second);
                 continue;
             }
-            if(fv.first == "speed")
+            if (fv.first == "speed")
             {
                 sysport.speed = stoi(fv.second);
                 continue;
             }
-            if(fv.first == "system_port_id")
+            if (fv.first == "system_port_id")
             {
                 sysport.port_id = stoi(fv.second);
+                continue;
+            }
+            if (fv.first == "num_voq")
+            {
+                sysport.num_voq = stoi(fv.second);
                 continue;
             }
         }
@@ -401,33 +405,44 @@ int main(int argc, char **argv)
         attrs.push_back(attr);
     }
 
-    //Get info required for VOQ system
+    // Instantiate database connectors
+    DBConnector appl_db("APPL_DB", 0);
+    DBConnector config_db("CONFIG_DB", 0);
+    DBConnector state_db("STATE_DB", 0);
+
+    // Get Switch type
+    getCfgSwitchType(&config_db, gMySwitchType);
+
+    // Get info required for VOQ system and connect to CHASSISS_APP_DB
+    shared_ptr<DBConnector> chassis_app_db;
     vector<sai_system_port_config_t> sysportconfiglist;
-    if(getSystemPortConfigList(sysportconfiglist))
+    if ((gMySwitchType == "voq") &&
+            (getSystemPortConfigList(&config_db, &appl_db, sysportconfiglist)))
     {
-        if (gMySwitchType == "voq")
+        attr.id = SAI_SWITCH_ATTR_TYPE;
+        attr.value.u32 = SAI_SWITCH_TYPE_VOQ;
+        attrs.push_back(attr);
+
+        attr.id = SAI_SWITCH_ATTR_SWITCH_ID;
+        attr.value.u32 = gVoqMySwitchId;
+        attrs.push_back(attr);
+
+        attr.id = SAI_SWITCH_ATTR_MAX_SYSTEM_CORES;
+        attr.value.u32 = gVoqMaxCores;
+        attrs.push_back(attr);
+
+        gCfgSystemPorts = (uint32_t) sysportconfiglist.size();
+        if (gCfgSystemPorts)
         {
-            attr.id = SAI_SWITCH_ATTR_TYPE;
-            attr.value.u32 = SAI_SWITCH_TYPE_VOQ;
+            attr.id = SAI_SWITCH_ATTR_SYSTEM_PORT_CONFIG_LIST;
+            attr.value.sysportconfiglist.count = gCfgSystemPorts;
+            attr.value.sysportconfiglist.list = sysportconfiglist.data();
             attrs.push_back(attr);
-
-            attr.id = SAI_SWITCH_ATTR_SWITCH_ID;
-            attr.value.u32 = gVoqMySwitchId;
-            attrs.push_back(attr);
-
-            attr.id = SAI_SWITCH_ATTR_MAX_SYSTEM_CORES;
-            attr.value.u32 = gVoqMaxCores;
-            attrs.push_back(attr);
-
-            gCfgSystemPorts = (uint32_t) sysportconfiglist.size();
-            if(gCfgSystemPorts)
-            {
-                attr.id = SAI_SWITCH_ATTR_SYSTEM_PORT_CONFIG_LIST;
-                attr.value.sysportconfiglist.count = gCfgSystemPorts;
-                attr.value.sysportconfiglist.list = sysportconfiglist.data();
-                attrs.push_back(attr);
-            }
         }
+
+        //Connect to CHASSIS_APP_DB in redis-server in control/supervisor card as per
+        //connection info in database_config.json
+        chassis_app_db = make_shared<DBConnector>("CHASSIS_APP_DB", 0, true);
     }
 
     /* Must be last Attribute */
@@ -514,18 +529,7 @@ int main(int argc, char **argv)
     SWSS_LOG_NOTICE("Created underlay router interface ID %" PRIx64, gUnderlayIfId);
 
     /* Initialize orchestration components */
-    DBConnector appl_db("APPL_DB", 0);
-    DBConnector config_db("CONFIG_DB", 0);
-    DBConnector state_db("STATE_DB", 0);
-
-    shared_ptr<DBConnector> chassis_app_db;
-    if(gMySwitchType == "voq")
-    {
-        //Connection for CHASSIS_APP_DB in redis-server in control/supervisor card as per
-        //connection info in database_config.json
-        chassis_app_db = make_shared<DBConnector>("CHASSIS_APP_DB", 0, true);
-    }
-
+    
     init_gearbox_phys(&appl_db);
 
     auto orchDaemon = make_shared<OrchDaemon>(&appl_db, &config_db, &state_db, chassis_app_db.get());
