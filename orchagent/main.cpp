@@ -379,6 +379,14 @@ int main(int argc, char **argv)
     attr.value.ptr = (void *)on_switch_shutdown_request;
     attrs.push_back(attr);
 
+    // Instantiate database connectors
+    DBConnector appl_db("APPL_DB", 0);
+    DBConnector config_db("CONFIG_DB", 0);
+    DBConnector state_db("STATE_DB", 0);
+
+    // Get switch_type
+    getCfgSwitchType(&config_db, gMySwitchType);
+
     if (gMacAddress)
     {
         attr.id = SAI_SWITCH_ATTR_SRC_MAC_ADDRESS;
@@ -404,14 +412,6 @@ int main(int argc, char **argv)
         attr.value.s8list.list = (int8_t*)gAsicInstance;
         attrs.push_back(attr);
     }
-
-    // Instantiate database connectors
-    DBConnector appl_db("APPL_DB", 0);
-    DBConnector config_db("CONFIG_DB", 0);
-    DBConnector state_db("STATE_DB", 0);
-
-    // Get Switch type
-    getCfgSwitchType(&config_db, gMySwitchType);
 
     // Get info required for VOQ system and connect to CHASSISS_APP_DB
     shared_ptr<DBConnector> chassis_app_db;
