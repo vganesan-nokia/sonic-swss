@@ -145,7 +145,7 @@ void init_gearbox_phys(DBConnector *applDb)
     delete tmpGearboxTable;
 }
 
-bool getCfgSwitchType(DBConnector *cfgDb, string &switch_type)
+void getCfgSwitchType(DBConnector *cfgDb, string &switch_type)
 {
     Table cfgDeviceMetaDataTable(cfgDb, CFG_DEVICE_METADATA_TABLE_NAME);
 
@@ -158,10 +158,9 @@ bool getCfgSwitchType(DBConnector *cfgDb, string &switch_type)
     if (switch_type != "voq" && switch_type != "fabric" && switch_type != "switch")
     {
         cout << "Invalid switch type " << switch_type.c_str() << " configured";
-        return false;
+    	//If configured switch type is none of the supported, assume regular switch
+        switch_type = "switch";
     }
-
-    return true;
 }
 
 bool getSystemPortConfigList(DBConnector *cfgDb, DBConnector *appDb, vector<sai_system_port_config_t> &sysportcfglist)
@@ -438,6 +437,11 @@ int main(int argc, char **argv)
             attr.value.sysportconfiglist.count = gCfgSystemPorts;
             attr.value.sysportconfiglist.list = sysportconfiglist.data();
             attrs.push_back(attr);
+        }
+        else
+        {
+            SWSS_LOG_ERROR("Voq switch create with 0 system ports!");
+            exit(EXIT_FAILURE);
         }
 
         //Connect to CHASSIS_APP_DB in redis-server in control/supervisor card as per

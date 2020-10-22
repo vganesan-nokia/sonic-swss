@@ -783,8 +783,11 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
                 }
             }
             else
+            {
                 /* Duplicate entry */
+                SWSS_LOG_INFO("System neighbor %s already exists", kfvKey(t).c_str());
                 it = consumer.m_toSync.erase(it);
+            }
         }
         else if (op == DEL_COMMAND)
         {

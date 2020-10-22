@@ -4711,7 +4711,7 @@ bool PortsOrch::addSystemPorts()
             //System port does not exist in the switch
             //This can not happen since all the system ports are supposed to be created during switch creation itself
 
-            SWSS_LOG_NOTICE("System port %s does not exist in switch. Port not added!", alias.c_str());
+            SWSS_LOG_ERROR("System port %s does not exist in switch. Port not added!", alias.c_str());
             continue;
         }
     }
