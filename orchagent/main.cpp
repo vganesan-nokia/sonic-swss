@@ -157,7 +157,7 @@ void getCfgSwitchType(DBConnector *cfgDb, string &switch_type)
 
     if (switch_type != "voq" && switch_type != "fabric" && switch_type != "switch")
     {
-        cout << "Invalid switch type " << switch_type.c_str() << " configured";
+        SWSS_LOG_ERROR("Invalid switch type %s configured", switch_type.c_str());
     	//If configured switch type is none of the supported, assume regular switch
         switch_type = "switch";
     }
@@ -179,7 +179,7 @@ bool getSystemPortConfigList(DBConnector *cfgDb, DBConnector *appDb, vector<sai_
     if (!cfgDeviceMetaDataTable.hget("localhost", "switch_id", value))
     {
         //VOQ switch id is not configured.
-        cout << "VOQ switch id is not configured";
+        SWSS_LOG_ERROR("VOQ switch id is not configured");
         return false;
     }
 
@@ -188,14 +188,14 @@ bool getSystemPortConfigList(DBConnector *cfgDb, DBConnector *appDb, vector<sai_
 
     if (gVoqMySwitchId < 0)
     {
-        cout << "Invalid VOQ switch id " << gVoqMySwitchId << " configured";
+        SWSS_LOG_ERROR("Invalid VOQ switch id %d configured", gVoqMySwitchId);
         return false;
     }
 
     if (!cfgDeviceMetaDataTable.hget("localhost", "max_cores", value))
     {
         //VOQ max cores is not configured.
-        cout << "VOQ max cores is not configured";
+        SWSS_LOG_ERROR("VOQ max cores is not configured");
         return false;
     }
 
@@ -204,7 +204,7 @@ bool getSystemPortConfigList(DBConnector *cfgDb, DBConnector *appDb, vector<sai_
 
     if (gVoqMaxCores == 0)
     {
-        cout << "Invalid VOQ max cores " << gVoqMaxCores << " configured";
+        SWSS_LOG_ERROR("Invalid VOQ max cores %d configured", gVoqMaxCores);
         return false;
     }
 
