@@ -31,13 +31,17 @@ class TestVirtualChassis(object):
         """ Test VOQ switch objects configuration """
         dvss = vct.dvss
         for name in dvss.keys():
-            if not name.startswith("supervisor"):
-                print("VOQ Switch test for {}".format(name))
-                dvs = dvss[name]
-                #Get the config info
-                config_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
-                metatbl = swsscommon.Table(config_db, "DEVICE_METADATA")
+            dvs = dvss[name]
+            #Get the config info
+            config_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
+            metatbl = swsscommon.Table(config_db, "DEVICE_METADATA")
 
+            cfg_switch_type = ""
+            status, cfg_switch_type = metatbl.hget("localhost", "switch_type")
+
+            #Test only for line cards
+            if cfg_switch_type == "voq":
+                print("VOQ Switch test for {}".format(name))
                 status, cfg_switch_id = metatbl.hget("localhost", "switch_id")
                 assert status, "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
 
@@ -86,15 +90,21 @@ class TestVirtualChassis(object):
         """ Test RIF record creation in ASIC_DB for remote interfaces """
         dvss = vct.dvss
         for name in dvss.keys():
-            if not name.startswith("supervisor"):
-                dvs = dvss[name]
-                config_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
-                metatbl = swsscommon.Table(config_db, "DEVICE_METADATA")
+            dvs = dvss[name]
+            config_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
+            metatbl = swsscommon.Table(config_db, "DEVICE_METADATA")
+
+            cfg_switch_type = ""
+            status, cfg_switch_type = metatbl.hget("localhost", "switch_type")
+
+            #Test only for line cards
+            if cfg_switch_type == "voq":    
                 status, lc_switch_id = metatbl.hget("localhost", "switch_id")
                 assert status, "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
                 if lc_switch_id == "0":
                     #Testing in Linecard1, In Linecard1 there will be RIF for Ethernet12 from Linecard3 
-                    #Note: Tesing can be done in any linecard for RIF of any system port interface
+                    #Note: Tesing can be done in any linecard for RIF of any system port interface.
+                    #      Here testing is done on linecard with switch id 0
                     asic_db = swsscommon.DBConnector(swsscommon.ASIC_DB, dvs.redis_sock, 0)
                     riftbl = swsscommon.Table(asic_db, "ASIC_STATE:SAI_OBJECT_TYPE_ROUTER_INTERFACE")
                     keys = list(riftbl.getKeys())
@@ -118,4 +128,5 @@ class TestVirtualChassis(object):
                     status, value = sptbl.hget(rif_port_oid, "SAI_SYSTEM_PORT_ATTR_CONFIG_INFO")
                     assert status, "Got error in getting system port config info for rif system port"
                     spcfginfo = ast.literal_eval(value)
+                    #Remote system ports's switch id should not match local switch id
                     assert spcfginfo["attached_switch_id"] != lc_switch_id, "RIF system port with wrong switch_id"
