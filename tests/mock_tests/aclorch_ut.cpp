@@ -317,8 +317,14 @@ namespace aclorch_test
             ASSERT_EQ(gIntfsOrch, nullptr);
             gIntfsOrch = new IntfsOrch(m_app_db.get(), APP_INTF_TABLE_NAME, gVrfOrch, m_chassis_app_db.get());
 
+            TableConnector applDbFdb(m_app_db.get(), APP_FDB_TABLE_NAME);
+            TableConnector stateDbFdb(m_state_db.get(), STATE_FDB_TABLE_NAME);
+
+            ASSERT_EQ(gFdbOrch, nullptr);
+            gFdbOrch = new FdbOrch(applDbFdb, stateDbFdb, gPortsOrch);
+
             ASSERT_EQ(gNeighOrch, nullptr);
-            gNeighOrch = new NeighOrch(m_app_db.get(), APP_NEIGH_TABLE_NAME, gIntfsOrch, m_chassis_app_db.get());
+            gNeighOrch = new NeighOrch(m_app_db.get(), APP_NEIGH_TABLE_NAME, gIntfsOrch, gFdbOrch, gPortsOrch, m_chassis_app_db.get());
 
             ASSERT_EQ(gFgNhgOrch, nullptr);
             vector<string> fgnhg_tables = {
@@ -330,12 +336,6 @@ namespace aclorch_test
 
             ASSERT_EQ(gRouteOrch, nullptr);
             gRouteOrch = new RouteOrch(m_app_db.get(), APP_ROUTE_TABLE_NAME, gSwitchOrch, gNeighOrch, gIntfsOrch, gVrfOrch, gFgNhgOrch);
-
-            TableConnector applDbFdb(m_app_db.get(), APP_FDB_TABLE_NAME);
-            TableConnector stateDbFdb(m_state_db.get(), STATE_FDB_TABLE_NAME);
-
-            ASSERT_EQ(gFdbOrch, nullptr);
-            gFdbOrch = new FdbOrch(applDbFdb, stateDbFdb, gPortsOrch);
 
             PolicerOrch *policer_orch = new PolicerOrch(m_config_db.get(), "POLICER");
 
@@ -359,14 +359,14 @@ namespace aclorch_test
 
             delete gSwitchOrch;
             gSwitchOrch = nullptr;
-            delete gFdbOrch;
-            gFdbOrch = nullptr;
             delete gMirrorOrch;
             gMirrorOrch = nullptr;
             delete gRouteOrch;
             gRouteOrch = nullptr;
             delete gNeighOrch;
             gNeighOrch = nullptr;
+            delete gFdbOrch;
+            gFdbOrch = nullptr;
             delete gIntfsOrch;
             gIntfsOrch = nullptr;
             delete gVrfOrch;
@@ -376,7 +376,7 @@ namespace aclorch_test
             delete gPortsOrch;
             gPortsOrch = nullptr;
             delete gFgNhgOrch;
-            gFgNhgOrch = nullptr; 
+            gFgNhgOrch = nullptr;
 
             auto status = sai_switch_api->remove_switch(gSwitchId);
             ASSERT_EQ(status, SAI_STATUS_SUCCESS);
@@ -625,7 +625,7 @@ namespace aclorch_test
             if (crmAclTableBindingCount != aclorchAclTableBindingCount)
             {
                 ADD_FAILURE() << "ACL table binding count is not consistent between CrmOrch ("
-                        << crmAclTableBindingCount << ") and AclOrch (" 
+                        << crmAclTableBindingCount << ") and AclOrch ("
                         << aclorchAclTableBindingCount << ")";
                 return false;
             }

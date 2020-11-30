@@ -640,7 +640,7 @@ bool PortsOrch::addSubPort(Port &port, const string &alias, const bool &adminUp,
     }
     if (vlan_id > MAX_VALID_VLAN_ID)
     {
-        SWSS_LOG_ERROR("sub interface %s Port object creation failed: invalid VLAN id %u", alias.c_str(), vlan_id);
+        SWSS_LOG_ERROR("Sub interface %s Port object creation failed: invalid VLAN id %u", alias.c_str(), vlan_id);
         return false;
     }
 
@@ -1814,13 +1814,13 @@ bool PortsOrch::initPort(const string &alias, const int index, const set<int> &l
         /* Determine if the port has already been initialized before */
         if (m_portList.find(alias) != m_portList.end() && m_portList[alias].m_port_id == id)
         {
-            SWSS_LOG_INFO("Port has already been initialized before alias:%s", alias.c_str());
+            SWSS_LOG_DEBUG("Port has already been initialized before alias:%s", alias.c_str());
         }
         else
         {
             Port p(alias, Port::PHY);
 
-            p.m_index = index; 
+            p.m_index = index;
             p.m_port_id = id;
 
             /* Initialize the port and create corresponding host interface */
@@ -1858,7 +1858,7 @@ bool PortsOrch::initPort(const string &alias, const int index, const set<int> &l
 
                 m_portList[alias].m_init = true;
 
-                SWSS_LOG_ERROR("Initialized port %s", alias.c_str());
+                SWSS_LOG_NOTICE("Initialized port %s", alias.c_str());
             }
             else
             {
@@ -2821,7 +2821,6 @@ void PortsOrch::doLagTask(Consumer &consumer)
             // Retrieve attributes
             uint32_t mtu = 0;
             string learn_mode;
-            bool operation_status_changed = false;
             string operation_status;
 
             for (auto i : kfvFieldsValues(t))
@@ -2842,16 +2841,6 @@ void PortsOrch::doLagTask(Consumer &consumer)
                         SWSS_LOG_ERROR("Invalid operation status value:%s", operation_status.c_str());
                         it++;
                         continue;
-                    }
-
-                    gNeighOrch->ifChangeInformNextHop(alias,
-                                                 (operation_status == "up"));
-                    Port lag;
-                    if (getPort(alias, lag))
-                    {
-                        operation_status_changed = 
-                           (string_oper_status.at(operation_status) != 
-                                                    lag.m_oper_status);
                     }
                 }
             }
@@ -2874,19 +2863,13 @@ void PortsOrch::doLagTask(Consumer &consumer)
             }
             else
             {
-
                 if (!operation_status.empty())
                 {
-                    l.m_oper_status = string_oper_status.at(operation_status);
+                    updatePortOperStatus(l, string_oper_status.at(operation_status));
+
                     m_portList[alias] = l;
                 }
-                if (operation_status_changed)
-                {
-                    PortOperStateUpdate update;
-                    update.port = l;
-                    update.operStatus = string_oper_status.at(operation_status);
-                    notify(SUBJECT_TYPE_PORT_OPER_STATE_CHANGE, static_cast<void *>(&update));
-                }
+
                 if (mtu != 0)
                 {
                     l.m_mtu = mtu;
@@ -4130,21 +4113,34 @@ void PortsOrch::updatePortOperStatus(Port &port, sai_port_oper_status_t status)
             oper_status_strings.at(status).c_str());
     if (status == port.m_oper_status)
     {
-        return ;
+        return;
     }
 
-    updateDbPortOperStatus(port, status);
+    if (port.m_type == Port::PHY)
+    {
+        updateDbPortOperStatus(port, status);
+    }
     port.m_oper_status = status;
 
     bool isUp = status == SAI_PORT_OPER_STATUS_UP;
-    if (!setHostIntfsOperStatus(port, isUp))
+    if (port.m_type == Port::PHY)
     {
-        SWSS_LOG_ERROR("Failed to set host interface %s operational status %s", port.m_alias.c_str(),
-                isUp ? "up" : "down");
+        if (!setHostIntfsOperStatus(port, isUp))
+        {
+            SWSS_LOG_ERROR("Failed to set host interface %s operational status %s", port.m_alias.c_str(),
+                    isUp ? "up" : "down");
+        }
     }
     if (!gNeighOrch->ifChangeInformNextHop(port.m_alias, isUp))
     {
         SWSS_LOG_WARN("Inform nexthop operation failed for interface %s", port.m_alias.c_str());
+    }
+    for (const auto &child_port : port.m_child_ports)
+    {
+        if (!gNeighOrch->ifChangeInformNextHop(child_port, isUp))
+        {
+            SWSS_LOG_WARN("Inform nexthop operation failed for sub interface %s", child_port.c_str());
+        }
     }
 
     PortOperStateUpdate update = {port, status};
@@ -4354,7 +4350,7 @@ bool PortsOrch::initGearboxPort(Port &port)
     {
         if (m_gearboxInterfaceMap.find(port.m_index) != m_gearboxInterfaceMap.end())
         {
-            SWSS_LOG_NOTICE("BOX: port_id:0x%lx index:%d alias:%s", port.m_port_id, port.m_index, port.m_alias.c_str());
+            SWSS_LOG_NOTICE("BOX: port_id:0x%" PRIx64 " index:%d alias:%s", port.m_port_id, port.m_index, port.m_alias.c_str());
 
             phy_id = m_gearboxInterfaceMap[port.m_index].phy_id;
             phyOidStr = m_gearboxPhyMap[phy_id].phy_oid;
@@ -4411,11 +4407,11 @@ bool PortsOrch::initGearboxPort(Port &port)
             status = sai_port_api->create_port(&systemPort, phyOid, static_cast<uint32_t>(attrs.size()), attrs.data());
             if (status != SAI_STATUS_SUCCESS)
             {
-                SWSS_LOG_ERROR("BOX: Failed to create Gearbox system-side port for alias:%s port_id:0x%lx index:%d status:%d",
+                SWSS_LOG_ERROR("BOX: Failed to create Gearbox system-side port for alias:%s port_id:0x%" PRIx64 " index:%d status:%d",
                         port.m_alias.c_str(), port.m_port_id, port.m_index, status);
                 return false;
             }
-            SWSS_LOG_NOTICE("BOX: Created Gearbox system-side port 0x%lx for alias:%s index:%d",
+            SWSS_LOG_NOTICE("BOX: Created Gearbox system-side port 0x%" PRIx64 " for alias:%s index:%d",
                     systemPort, port.m_alias.c_str(), port.m_index);
 
             /* Create LINE-SIDE port */
@@ -4494,11 +4490,11 @@ bool PortsOrch::initGearboxPort(Port &port)
             status = sai_port_api->create_port(&linePort, phyOid, static_cast<uint32_t>(attrs.size()), attrs.data());
             if (status != SAI_STATUS_SUCCESS)
             {
-                SWSS_LOG_ERROR("BOX: Failed to create Gearbox line-side port for alias:%s port_id:0x%lx index:%d status:%d",
+                SWSS_LOG_ERROR("BOX: Failed to create Gearbox line-side port for alias:%s port_id:0x%" PRIx64 " index:%d status:%d",
                    port.m_alias.c_str(), port.m_port_id, port.m_index, status);
                 return false;
             }
-            SWSS_LOG_NOTICE("BOX: Created Gearbox line-side port 0x%lx for alias:%s index:%d",
+            SWSS_LOG_NOTICE("BOX: Created Gearbox line-side port 0x%" PRIx64 " for alias:%s index:%d",
                 linePort, port.m_alias.c_str(), port.m_index);
 
             /* Connect SYSTEM-SIDE to LINE-SIDE */
@@ -4514,11 +4510,11 @@ bool PortsOrch::initGearboxPort(Port &port)
             status = sai_port_api->create_port_connector(&connector, phyOid, static_cast<uint32_t>(attrs.size()), attrs.data());
             if (status != SAI_STATUS_SUCCESS)
             {
-                SWSS_LOG_ERROR("BOX: Failed to connect Gearbox system-side:0x%lx to line-side:0x%lx; status:%d", systemPort, linePort, status);
+                SWSS_LOG_ERROR("BOX: Failed to connect Gearbox system-side:0x%" PRIx64 " to line-side:0x%" PRIx64 "; status:%d", systemPort, linePort, status);
                 return false;
             }
 
-            SWSS_LOG_NOTICE("BOX: Connected Gearbox ports; system-side:0x%lx to line-side:0x%lx", systemPort, linePort);
+            SWSS_LOG_NOTICE("BOX: Connected Gearbox ports; system-side:0x%" PRIx64 " to line-side:0x%" PRIx64, systemPort, linePort);
             m_gearboxPortListLaneMap[port.m_port_id] = make_tuple(systemPort, linePort);
         }
     }
