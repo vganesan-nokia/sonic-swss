@@ -130,3 +130,80 @@ class TestVirtualChassis(object):
                     spcfginfo = ast.literal_eval(value)
                     #Remote system ports's switch id should not match local switch id
                     assert spcfginfo["attached_switch_id"] != lc_switch_id, "RIF system port with wrong switch_id"
+
+    def test_chassis_system_neigh(self, vct):
+        """ Test neigh record creation and syncing to chassis app db """
+        
+        """
+        This test validates that:
+           (i)   Local neighbor entry is created with encap index
+           (ii)  Local neighbor is synced to chassis ap db with assigned encap index
+           TODO: (iii) Remote neighbor entry is created in ASIC_DB with received encap index
+        """
+
+        dvss = vct.dvss
+        for name in dvss.keys():
+            dvs = dvss[name]
+            config_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
+            metatbl = swsscommon.Table(config_db, "DEVICE_METADATA")
+
+            cfg_switch_type = ""
+            status, cfg_switch_type = metatbl.hget("localhost", "switch_type")
+
+            #Neighbor record verifiation done in line card
+            if cfg_switch_type == "voq":    
+                status, lc_switch_id = metatbl.hget("localhost", "switch_id")
+                assert status, "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
+                if lc_switch_id == "0":
+
+                    # Add a static neighbor
+                    _, res = dvs.runcmd(['sh', "-c", "ip neigh add 10.8.101.2 lladdr 00:01:02:03:04:05 dev Ethernet0"])
+                    assert res == "", "Error configuring static neigh"
+
+                    asic_db = swsscommon.DBConnector(swsscommon.ASIC_DB, dvs.redis_sock, 0)
+                    neightbl = swsscommon.Table(asic_db, "ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY")
+                    neighkeys = list(neightbl.getKeys())
+                    assert len(neighkeys), "No neigh entries in ASIC_DB"
+                    
+                    #Check for presence of the neighbor in ASIC_DB
+                    test_neigh = ""
+                    for nkey in neighkeys:
+                        ne = ast.literal_eval(nkey)
+                        if ne['ip'] == '10.8.101.2':
+                            test_neigh = nkey
+                            break
+                        
+                    assert test_neigh != "", "Neigh not found in ASIC_DB"
+                    
+                    #Check for presence of encap index, retrieve and store it for sync verification
+                    status, encap_index = neightbl.hget(test_neigh,"SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX")
+                    assert status, "VOQ encap index is not programmed in ASIC_DB"
+                    
+                    break
+                    
+        #Verify neighbor record syncing with encap index       
+        dvss = vct.dvss
+        for name in dvss.keys():
+            if name.startswith("supervisor"):
+                dvs = dvss[name]
+                chassis_app_db = swsscommon.DBConnector(swsscommon.CHASSIS_APP_DB, dvs.redis_chassis_sock, 0)
+                sysneightbl = swsscommon.Table(chassis_app_db, "SYSTEM_NEIGH")
+                sysneighkeys = list(sysneightbl.getKeys())
+                assert len(sysneighkeys), "No system neighbor entries in chassis app db"
+                
+                test_sysneigh = ""
+                for sysnk in sysneighkeys:
+                    sysnk_tok = sysnk.split("|")
+                    assert len(sysnk_tok) == 3, "Invalid system neigh key in chassis app db"
+                    if sysnk_tok[2] == "10.8.101.2":
+                        test_sysneigh = sysnk
+                        break
+                
+                assert test_sysneigh != "", "Neigh is not sync-ed to chassis app db"
+                
+                status, sys_neigh_encap_index = sysneightbl.hget(test_sysneigh,"encap_index")
+                assert status, "System neigh in chassis app db does not have encap index"
+                
+                assert encap_index == sys_neigh_encap_index, "Encap index not sync-ed correctly"
+                
+                break
