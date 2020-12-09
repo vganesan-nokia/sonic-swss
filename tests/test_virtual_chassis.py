@@ -11,7 +11,7 @@ class TestVirtualChassis(object):
         nbrs = vct.get_topo_neigh()
         for name in dvss.keys():
             dv = dvss[name]
-            #ping all vs's inband address
+            # ping all vs's inband address
             for ctn in vct.inbands.keys():
                 ip = vct.inbands[ctn]["inband_address"]
                 ip = ip.split("/")[0]
@@ -29,17 +29,24 @@ class TestVirtualChassis(object):
                 assert '5 received' in out
 
     def test_voq_switch(self, vct):
-        """ Test VOQ switch objects configuration """
+        """Test VOQ switch objects configuration.
+        
+        This test validates configuration of switch creation objects required for
+        VOQ switches. The switch_type, max_cores and switch_id attributes configuration
+        are verified. For the System port config list, it is verified that all the 
+        configured system ports are avaiable in the asic db by checking the count.
+        """
+
         dvss = vct.dvss
         for name in dvss.keys():
             dvs = dvss[name]
-            #Get the config info
-            config_db = DVSDatabase(swsscommon.CONFIG_DB, dvs.redis_sock)
+            # Get the config info
+            config_db = dvs.get_config_db()
             metatbl = config_db.get_entry("DEVICE_METADATA", "localhost")
 
             cfg_switch_type = metatbl.get("switch_type")
 
-            #Test only for line cards
+            # Test only for line cards
             if cfg_switch_type == "voq":
                 print("VOQ Switch test for {}".format(name))
                 cfg_switch_id = metatbl.get("switch_id")
@@ -51,7 +58,7 @@ class TestVirtualChassis(object):
                 cfgspkeys = config_db.get_keys("SYSTEM_PORT")
                 sp_count = len(cfgspkeys)
 
-                asic_db = DVSDatabase(swsscommon.ASIC_DB, dvs.redis_sock)
+                asic_db = dvs.get_asic_db()
                 keys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_SWITCH")
                 switch_oid_key = keys[0]
                 
@@ -68,12 +75,19 @@ class TestVirtualChassis(object):
                 
                 value = switch_entry.get("SAI_SWITCH_ATTR_SYSTEM_PORT_CONFIG_LIST")
                 assert value != "", "Empty system port config list"
-                #Convert the spcfg string to dictionary
+                # Convert the spcfg string to dictionary
                 spcfg = ast.literal_eval(value)
                 assert spcfg['count'] == sp_count, "Number of systems ports configured is invalid"
     
     def test_chassis_app_db_sync(self, vct):
-        """ Test chassis app db syncing """
+        """Test chassis app db syncing.
+        
+        This test is for verifying the database sync mechanism. With the virtual chassis
+        setup, it is verified that at least one database entry is synced from line card to
+        supervisor card. An interface entry is used as sample database entry for verification
+        of syncing mechanism.
+        """
+        
         dvss = vct.dvss
         for name in dvss.keys():
             if name.startswith("supervisor"):
@@ -83,25 +97,33 @@ class TestVirtualChassis(object):
                 assert len(keys), "No chassis app db syncing is done"
                 
     def test_chassis_system_interface(self, vct):
-        """ Test RIF record creation in ASIC_DB for remote interfaces """
+        """Test RIF record creation in ASIC_DB for remote interfaces.
+        
+        This test verifies RIF programming in ASIC_DB for remote interface. The orchagent
+        creates RIF record for system port interfaces from other line cards. It is verified
+        by retrieving a RIF record from local ASIC_DB that corresponds to a remote system port
+        and checking that the switch id of that remote system port does not match the local asic 
+        switch id.
+        """
+        
         dvss = vct.dvss
         for name in dvss.keys():
             dvs = dvss[name]
 
-            config_db = DVSDatabase(swsscommon.CONFIG_DB, dvs.redis_sock)
+            config_db = dvs.get_config_db()
             metatbl = config_db.get_entry("DEVICE_METADATA", "localhost")
 
             cfg_switch_type = metatbl.get("switch_type")
 
-            #Test only for line cards
+            # Test only for line cards
             if cfg_switch_type == "voq":    
                 lc_switch_id = metatbl.get("switch_id")
                 assert lc_switch_id != "", "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
                 if lc_switch_id == "0":
-                    #Testing in Linecard1, In Linecard1 there will be RIF for Ethernet12 from Linecard3 
-                    #Note: Tesing can be done in any linecard for RIF of any system port interface.
-                    #      Here testing is done on linecard with switch id 0
-                    asic_db = DVSDatabase(swsscommon.ASIC_DB, dvs.redis_sock)
+                    # Testing in Linecard1, In Linecard1 there will be RIF for Ethernet12 from Linecard3 
+                    # Note: Tesing can be done in any linecard for RIF of any system port interface.
+                    #       Here testing is done on linecard with switch id 0
+                    asic_db = dvs.get_asic_db()
                     keys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_ROUTER_INTERFACE")
                     assert len(keys), "No router interfaces in ASIC_DB"
 
@@ -114,23 +136,22 @@ class TestVirtualChassis(object):
                             value = rif_entry.get("SAI_ROUTER_INTERFACE_ATTR_PORT_ID")
                             assert value != "", "Got error in getting RIF port"
                             if value.startswith("oid:0x5d"):
-                                #System port RIF, this is used as key for system port config info retrieval
+                                # System port RIF, this is used as key for system port config info retrieval
                                 rif_port_oid = value
                                 break
 
                     assert rif_port_oid != "", "No RIF records for remote interfaces in ASIC_DB"
-                    #Validate if the system port is from valid switch
+                    # Validate if the system port is from valid switch
                     sp_entry = asic_db.get_entry("ASIC_STATE:SAI_OBJECT_TYPE_SYSTEM_PORT", rif_port_oid)
                     value = sp_entry.get("SAI_SYSTEM_PORT_ATTR_CONFIG_INFO")
                     assert value != "", "Got error in getting system port config info for rif system port"
                     spcfginfo = ast.literal_eval(value)
-                    #Remote system ports's switch id should not match local switch id
+                    # Remote system ports's switch id should not match local switch id
                     assert spcfginfo["attached_switch_id"] != lc_switch_id, "RIF system port with wrong switch_id"
 
     def test_chassis_system_neigh(self, vct):
-        """ Test neigh record creation and syncing to chassis app db """
+        """Test neigh record creation and syncing to chassis app db.
         
-        """
         This test validates that:
            (i)   Local neighbor entry is created with encap index
            (ii)  Local neighbor is synced to chassis ap db with assigned encap index
@@ -141,12 +162,12 @@ class TestVirtualChassis(object):
         for name in dvss.keys():
             dvs = dvss[name]
 
-            config_db = DVSDatabase(swsscommon.CONFIG_DB, dvs.redis_sock)
+            config_db = dvs.get_config_db()
             metatbl = config_db.get_entry("DEVICE_METADATA", "localhost")
 
             cfg_switch_type = metatbl.get("switch_type")
 
-            #Neighbor record verifiation done in line card
+            # Neighbor record verifiation done in line card
             if cfg_switch_type == "voq":    
                 lc_switch_id = metatbl.get("switch_id")
                 assert lc_switch_id != "", "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
@@ -156,11 +177,11 @@ class TestVirtualChassis(object):
                     _, res = dvs.runcmd(['sh', "-c", "ip neigh add 10.8.101.2 lladdr 00:01:02:03:04:05 dev Ethernet0"])
                     assert res == "", "Error configuring static neigh"
 
-                    asic_db = DVSDatabase(swsscommon.ASIC_DB, dvs.redis_sock)
+                    asic_db = dvs.get_asic_db()
                     neighkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY")
                     assert len(neighkeys), "No neigh entries in ASIC_DB"
                     
-                    #Check for presence of the neighbor in ASIC_DB
+                    # Check for presence of the neighbor in ASIC_DB
                     test_neigh = ""
                     for nkey in neighkeys:
                         ne = ast.literal_eval(nkey)
@@ -170,14 +191,14 @@ class TestVirtualChassis(object):
                         
                     assert test_neigh != "", "Neigh not found in ASIC_DB"
                     
-                    #Check for presence of encap index, retrieve and store it for sync verification
+                    # Check for presence of encap index, retrieve and store it for sync verification
                     test_neigh_entry = asic_db.get_entry("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY", test_neigh)
                     encap_index = test_neigh_entry.get("SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX")
                     assert encap_index != "", "VOQ encap index is not programmed in ASIC_DB"
                     
                     break
                     
-        #Verify neighbor record syncing with encap index       
+        # Verify neighbor record syncing with encap index       
         dvss = vct.dvss
         for name in dvss.keys():
             if name.startswith("supervisor"):
