@@ -358,9 +358,9 @@ void NbrMgr::doStateSystemNeighTask(Consumer &consumer)
                     mac_address = MacAddress(fvValue(*i));
             }
 
-            if (!isIntfStateOk(nbr_odev))
+            if (!isIntfOperUp(nbr_odev))
             {
-                SWSS_LOG_DEBUG("Interface %s is not ready, skipping system neigh %s'", nbr_odev.c_str(), kfvKey(t).c_str());
+                SWSS_LOG_DEBUG("Device %s is not oper up, skipping system neigh %s'", nbr_odev.c_str(), kfvKey(t).c_str());
                 it++;
                 continue;
             }
@@ -380,6 +380,8 @@ void NbrMgr::doStateSystemNeighTask(Consumer &consumer)
             {
                 SWSS_LOG_ERROR("Route entry add on dev %s failed for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
                 delKernelNeigh(nbr_odev, ip_address);
+                // Delete route to take care of deletion of exiting route of nbr for mac change.
+                delKernelRoute(ip_address);
                 it++;
                 continue;
             }
@@ -413,6 +415,22 @@ void NbrMgr::doStateSystemNeighTask(Consumer &consumer)
 
         it = consumer.m_toSync.erase(it);
     }
+}
+
+bool NbrMgr::isIntfOperUp(const string &alias)
+{
+    string oper;
+
+    if (m_statePortTable.hget(alias, "oper_status", oper))
+    {
+        if (oper == "up")
+        {
+            SWSS_LOG_DEBUG("Intf %s is oper up", alias.c_str());
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool NbrMgr::getVoqInbandInterfaceName(string &ibif)

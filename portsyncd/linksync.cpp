@@ -165,16 +165,18 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
     struct rtnl_link *link = (struct rtnl_link *)obj;
     string key = rtnl_link_get_name(link);
 
+    vector<FieldValueTuple> temp;
     if (key.compare(0, INTFS_PREFIX.length(), INTFS_PREFIX) &&
         key.compare(0, LAG_PREFIX.length(), LAG_PREFIX) &&
-        key.compare(0, MGMT_PREFIX.length(), MGMT_PREFIX))
+        key.compare(0, MGMT_PREFIX.length(), MGMT_PREFIX) &&
+        !m_portTable.get(key, temp))
     {
         return;
     }
 
     unsigned int flags = rtnl_link_get_flags(link);
     bool admin = flags & IFF_UP;
-    bool oper = flags & IFF_LOWER_UP;
+    bool oper = flags & IFF_RUNNING;
 
     char addrStr[MAX_ADDR_SIZE+1] = {0};
     nl_addr2str(rtnl_link_get_addr(link), addrStr, MAX_ADDR_SIZE);
@@ -246,15 +248,16 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
     /* front panel interfaces: Check if the port is in the PORT_TABLE
      * non-front panel interfaces such as eth0, lo which are not in the
      * PORT_TABLE are ignored. */
-    vector<FieldValueTuple> temp;
     if (m_portTable.get(key, temp))
     {
         g_portSet.erase(key);
         FieldValueTuple tuple("state", "ok");
         vector<FieldValueTuple> vector;
         vector.push_back(tuple);
+        FieldValueTuple op("oper_status", oper ? "up" : "down");
+        vector.push_back(op);
         m_statePortTable.set(key, vector);
-        SWSS_LOG_NOTICE("Publish %s(ok) to state db", key.c_str());
+        SWSS_LOG_NOTICE("Publish %s(ok:%s) to state db", key.c_str(), oper ? "up" : "down");
     }
     else
     {
