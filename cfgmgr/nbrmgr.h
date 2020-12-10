@@ -37,6 +37,7 @@ private:
     bool delKernelRoute(IpAddress ip_addr);
     bool addKernelNeigh(string odev, IpAddress ip_addr, MacAddress mac_addr);
     bool delKernelNeigh(string odev, IpAddress ip_addr);
+    bool isIntfOperUp(const std::string &alias);
     unique_ptr<Table> m_cfgVoqInbandInterfaceTable;
 
     Table m_statePortTable, m_stateLagTable, m_stateVlanTable, m_stateIntfTable, m_stateNeighRestoreTable;
