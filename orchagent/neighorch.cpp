@@ -809,11 +809,14 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
         return;
     }
 
-    // Wait till the Inband interface is both admin up and oper up
-    if (ibif.m_admin_state_up != true || ibif.m_oper_status != SAI_PORT_OPER_STATUS_UP)
+    // For "port" type inband interface, wait till the Inband interface is both admin up and oper up
+    if (ibif.m_type != Port::VLAN)
     {
-        // Inband port is not operational yet
-        return;
+        if (ibif.m_admin_state_up != true || ibif.m_oper_status != SAI_PORT_OPER_STATUS_UP)
+        {
+            // Inband port is not operational yet
+            return;
+        }
     }
 
     auto it = consumer.m_toSync.begin();

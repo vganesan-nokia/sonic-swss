@@ -4868,9 +4868,9 @@ bool PortsOrch::setVoqInbandIntf(string &alias, string &type)
         return false;
     }
 
-    if(!port.m_hif_id)
+    if(type == "port" && !port.m_hif_id)
     {
-        SWSS_LOG_ERROR("Host interface is not available for port/vlan %s", alias.c_str());
+        SWSS_LOG_ERROR("Host interface is not available for port %s", alias.c_str());
         return false;
     }
 

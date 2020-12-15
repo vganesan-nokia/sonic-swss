@@ -326,7 +326,8 @@ void NbrMgr::doStateSystemNeighTask(Consumer &consumer)
     //Get the name of the device on which the neigh and route are
     //going to be programmed.
     string nbr_odev;
-    if(!getVoqInbandInterfaceName(nbr_odev))
+    string ibif_type;
+    if(!getVoqInbandInterfaceName(nbr_odev, ibif_type))
     {
         //The inband interface is not available yet
         return;
@@ -358,7 +359,7 @@ void NbrMgr::doStateSystemNeighTask(Consumer &consumer)
                     mac_address = MacAddress(fvValue(*i));
             }
 
-            if (!isIntfOperUp(nbr_odev))
+            if (ibif_type == "port" && !isIntfOperUp(nbr_odev))
             {
                 SWSS_LOG_DEBUG("Device %s is not oper up, skipping system neigh %s'", nbr_odev.c_str(), kfvKey(t).c_str());
                 it++;
@@ -433,9 +434,8 @@ bool NbrMgr::isIntfOperUp(const string &alias)
     return false;
 }
 
-bool NbrMgr::getVoqInbandInterfaceName(string &ibif)
+bool NbrMgr::getVoqInbandInterfaceName(string &ibif, string &type)
 {
-
     vector<string> keys;
     m_cfgVoqInbandInterfaceTable->getKeys(keys);
 
@@ -444,9 +444,21 @@ bool NbrMgr::getVoqInbandInterfaceName(string &ibif)
         SWSS_LOG_NOTICE("Voq Inband interface is not configured!");
         return false;
     }
-    //key:"alias" = inband interface name
+
+    // key:"alias" = inband interface name
+
     vector<string> if_keys = tokenize(keys[0], config_db_key_delimiter);
+
     ibif = if_keys[0];
+
+    // Get the type of the inband interface
+
+    if (!m_cfgVoqInbandInterfaceTable->hget(ibif, "inband_type", type))
+    {
+        SWSS_LOG_ERROR("Getting Voq Inband interface type failed for %s", ibif.c_str());
+        return false;
+    }
+
     return true;
 }
 
