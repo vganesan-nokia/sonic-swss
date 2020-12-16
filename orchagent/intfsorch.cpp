@@ -35,6 +35,7 @@ extern BufferOrch *gBufferOrch;
 extern bool gIsNatSupported;
 extern NeighOrch *gNeighOrch;
 extern string gMySwitchType;
+extern int32_t gVoqMySwitchId;
 
 const int intfsorch_pri = 35;
 
@@ -1362,9 +1363,13 @@ bool IntfsOrch::isRemoteSystemPortIntf(string alias)
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
+
+        if (port.m_type == Port::LAG)
+            return(port.m_system_lag_info.switch_id != gVoqMySwitchId);
+
         return(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE);
     }
-    //Given alias is system port alias of the local port
+    //Given alias is system port alias of the local port/LAG
     return false;
 }
 
@@ -1375,11 +1380,22 @@ void IntfsOrch::voqSyncAddIntf(string &alias)
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
-        if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+        if (port.m_type == Port::LAG)
         {
-            return;
+            if (port.m_system_lag_info.switch_id != gVoqMySwitchId)
+            {
+                return;
+            }
+            alias = port.m_system_lag_info.alias;
         }
-        alias = port.m_system_port_info.alias;
+        else
+        {
+            if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+            {
+                return;
+            }
+            alias = port.m_system_port_info.alias;
+        }
     }
     else
     {
@@ -1401,11 +1417,22 @@ void IntfsOrch::voqSyncDelIntf(string &alias)
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
-        if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+        if (port.m_type == Port::LAG)
         {
-            return;
+            if (port.m_system_lag_info.switch_id != gVoqMySwitchId)
+            {
+                return;
+            }
+            alias = port.m_system_lag_info.alias;
         }
-        alias = port.m_system_port_info.alias;
+        else
+        {
+            if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+            {
+                return;
+            }
+            alias = port.m_system_port_info.alias;
+        }
     }
     else
     {

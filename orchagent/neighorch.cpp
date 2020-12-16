@@ -18,6 +18,7 @@ extern RouteOrch *gRouteOrch;
 extern FgNhgOrch *gFgNhgOrch;
 extern Directory<Orch*> gDirectory;
 extern string gMySwitchType;
+extern int32_t gVoqMySwitchId;
 
 const int neighorch_pri = 30;
 
@@ -1208,11 +1209,22 @@ void NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacA
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
-        if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+        if (port.m_type == Port::LAG)
         {
-            return;
+            if (port.m_system_lag_info.switch_id != gVoqMySwitchId)
+            {
+                return;
+            }
+            alias = port.m_system_lag_info.alias;
         }
-        alias = port.m_system_port_info.alias;
+        else
+        {
+            if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+            {
+                return;
+            }
+            alias = port.m_system_port_info.alias;
+        }
     }
     else
     {
@@ -1254,11 +1266,22 @@ void NeighOrch::voqSyncDelNeigh(string &alias, IpAddress &ip_address)
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
-        if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+        if (port.m_type == Port::LAG)
         {
-            return;
+            if (port.m_system_lag_info.switch_id != gVoqMySwitchId)
+            {
+                return;
+            }
+            alias = port.m_system_lag_info.alias;
         }
-        alias = port.m_system_port_info.alias;
+        else
+        {
+            if(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE)
+            {
+                return;
+            }
+            alias = port.m_system_port_info.alias;
+        }
     }
     else
     {
