@@ -502,7 +502,7 @@ namespace aclorch_test
                     switch (meta->attrvaluetype)
                     {
                         case SAI_ATTR_VALUE_TYPE_INT32_LIST:
-                            new_attr.value.s32list.list = (int32_t *)malloc(sizeof(int32_t) * attr.value.s32list.count);
+                            new_attr.value.s32list.list = (int32_t *)calloc(attr.value.s32list.count, sizeof(int32_t));
                             new_attr.value.s32list.count = attr.value.s32list.count;
                             m_s32list_pool.emplace_back(new_attr.value.s32list.list);
                             break;
@@ -559,7 +559,7 @@ namespace aclorch_test
                     switch (meta->attrvaluetype)
                     {
                         case SAI_ATTR_VALUE_TYPE_INT32_LIST:
-                            new_attr.value.s32list.list = (int32_t *)malloc(sizeof(int32_t) * attr.value.s32list.count);
+                            new_attr.value.s32list.list = (int32_t *)calloc(attr.value.s32list.count, sizeof(int32_t));
                             new_attr.value.s32list.count = attr.value.s32list.count;
                             m_s32list_pool.emplace_back(new_attr.value.s32list.list);
                             break;

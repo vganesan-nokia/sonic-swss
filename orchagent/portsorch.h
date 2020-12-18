@@ -126,6 +126,7 @@ public:
 
     bool addSubPort(Port &port, const string &alias, const bool &adminUp = true, const uint32_t &mtu = 0);
     bool removeSubPort(const string &alias);
+    bool updateL3VniStatus(uint16_t vlan_id, bool status);
     void getLagMember(Port &lag, vector<Port> &portv);
     void updateChildPortsMtu(const Port &p, const uint32_t mtu);
 
