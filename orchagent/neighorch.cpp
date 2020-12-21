@@ -1030,7 +1030,8 @@ bool NeighOrch::addInbandNeighbor(string alias, IpAddress ip_address)
 
 bool NeighOrch::delInbandNeighbor(string alias, IpAddress ip_address)
 {
-    //Remove neighbor from SAI
+    // Remove local inband neighbor from SAI
+
     if(gIntfsOrch->isRemoteSystemPortIntf(alias))
     {
         //Remote Inband interface. Skip

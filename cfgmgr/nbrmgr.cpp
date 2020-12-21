@@ -422,11 +422,11 @@ bool NbrMgr::isIntfOperUp(const string &alias)
 {
     string oper;
 
-    if (m_statePortTable.hget(alias, "oper_status", oper))
+    if (m_statePortTable.hget(alias, "netdev_oper_status", oper))
     {
         if (oper == "up")
         {
-            SWSS_LOG_DEBUG("Intf %s is oper up", alias.c_str());
+            SWSS_LOG_DEBUG("NetDev %s is oper up", alias.c_str());
             return true;
         }
     }
