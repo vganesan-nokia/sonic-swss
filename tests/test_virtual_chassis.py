@@ -92,7 +92,7 @@ class TestVirtualChassis(object):
         for name in dvss.keys():
             if name.startswith("supervisor"):
                 dvs = dvss[name]
-                chassis_app_db = DVSDatabase(dvs.CHASSIS_APP_DB_ID, dvs.redis_chassis_sock)
+                chassis_app_db = DVSDatabase(swsscommon.CHASSIS_APP_DB, dvs.redis_chassis_sock)
                 keys = chassis_app_db.get_keys("SYSTEM_INTERFACE")
                 assert len(keys), "No chassis app db syncing is done"
                 
@@ -203,7 +203,7 @@ class TestVirtualChassis(object):
         for name in dvss.keys():
             if name.startswith("supervisor"):
                 dvs = dvss[name]
-                chassis_app_db = DVSDatabase(dvs.CHASSIS_APP_DB_ID, dvs.redis_chassis_sock)
+                chassis_app_db = DVSDatabase(swsscommon.CHASSIS_APP_DB, dvs.redis_chassis_sock)
                 sysneighkeys = chassis_app_db.get_keys("SYSTEM_NEIGH")
                 assert len(sysneighkeys), "No system neighbor entries in chassis app db"
                 

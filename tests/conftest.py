@@ -225,7 +225,6 @@ class DockerVirtualSwitch:
     CONFIG_DB_ID = 4
     FLEX_COUNTER_DB_ID = 5
     STATE_DB_ID = 6
-    CHASSIS_APP_DB_ID = 12
 
     # FIXME: Should be broken up into helper methods in a later PR.
     def __init__(
