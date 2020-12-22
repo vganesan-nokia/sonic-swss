@@ -1069,7 +1069,7 @@ bool IntfsOrch::addRouterIntfs(sai_object_id_t vrf_id, Port &port)
 
     if(gMySwitchType == "voq")
     {
-        //Sync the interface to add to the SYSTEM_INTERFACE table of CHASSIS_APP_DB
+        // Sync the interface of local port/LAG to the SYSTEM_INTERFACE table of CHASSIS_APP_DB
         voqSyncAddIntf(port.m_alias);
     }
 
@@ -1105,7 +1105,7 @@ bool IntfsOrch::removeRouterIntfs(Port &port)
 
     if(gMySwitchType == "voq")
     {
-        //Sync the interface to del from the SYSTEM_INTERFACE table of CHASSIS_APP_DB
+        // Sync the removal of interface of local port/LAG to the SYSTEM_INTERFACE table of CHASSIS_APP_DB
         voqSyncDelIntf(port.m_alias);
     }
 

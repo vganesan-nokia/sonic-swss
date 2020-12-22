@@ -4769,7 +4769,6 @@ bool PortsOrch::addSystemPorts()
         int32_t switch_id = -1;
         int32_t core_index = -1;
         int32_t core_port_index = -1;
-        int32_t speed = -1;
 
         for ( auto &fv : spFv )
         {
@@ -4788,11 +4787,6 @@ bool PortsOrch::addSystemPorts()
                 core_port_index = stoi(fv.second);
                 continue;
             }
-            if(fv.first == "speed")
-            {
-                speed = stoi(fv.second);
-                continue;
-            }
             if(fv.first == "system_port_id")
             {
                 system_port_id = stoi(fv.second);
@@ -4805,11 +4799,6 @@ bool PortsOrch::addSystemPorts()
             SWSS_LOG_ERROR("Invalid or Missing field values for %s! system_port id:%d, switch_id:%d, core_index:%d, core_port_index:%d",
                     alias.c_str(), system_port_id, switch_id, core_index, core_port_index);
             continue;
-        }
-
-        if(speed < 0)
-        {
-            speed = 400000;
         }
 
         tuple<int, int, int> sp_key(switch_id, core_index, core_port_index);
