@@ -629,7 +629,6 @@ bool NeighOrch::addNeighbor(const NeighborEntry &neighborEntry, const MacAddress
 
         status = sai_neighbor_api->create_neighbor_entry(&neighbor_entry,
                                    (uint32_t)neighbor_attrs.size(), neighbor_attrs.data());
-
         if (status != SAI_STATUS_SUCCESS)
         {
             if (status == SAI_STATUS_ITEM_ALREADY_EXISTS)
@@ -1034,7 +1033,8 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
                 continue;
             }
 
-            if (m_syncdNeighbors.find(neighbor_entry) == m_syncdNeighbors.end() || m_syncdNeighbors[neighbor_entry] != mac_address)
+            if (m_syncdNeighbors.find(neighbor_entry) == m_syncdNeighbors.end() ||
+                    m_syncdNeighbors[neighbor_entry].mac != mac_address)
             {
                 //Add neigh to SAI
                 if (addNeighbor(neighbor_entry, mac_address))
