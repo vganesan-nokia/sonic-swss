@@ -21,11 +21,8 @@ int32_t LagIdAllocator::lagIdAdd(
 {
     SWSS_LOG_ENTER();
 
+    // No keys
     vector<string> keys;
-    keys.push_back(CHASSIS_APP_LAG_ID_START_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_END_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_TABLE_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_SET_NAME);
 
     vector<string> args;
     args.push_back("add");
@@ -51,11 +48,8 @@ int32_t LagIdAllocator::lagIdDel(
 {
     SWSS_LOG_ENTER();
 
+    // No keys
     vector<string> keys;
-    keys.push_back(CHASSIS_APP_LAG_ID_START_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_END_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_TABLE_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_SET_NAME);
 
     vector<string> args;
     args.push_back("del");
@@ -80,11 +74,8 @@ int32_t LagIdAllocator::lagIdGet(
 {
     SWSS_LOG_ENTER();
 
+    // No keys
     vector<string> keys;
-    keys.push_back(CHASSIS_APP_LAG_ID_START_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_END_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_TABLE_NAME);
-    keys.push_back(CHASSIS_APP_LAG_ID_SET_NAME);
 
     vector<string> args;
     args.push_back("get");
