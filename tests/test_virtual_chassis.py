@@ -2,6 +2,7 @@ import pytest
 from swsscommon import swsscommon
 from dvslib.dvs_database import DVSDatabase
 import ast
+import time
 
 class TestVirtualChassis(object):
 
@@ -38,6 +39,25 @@ class TestVirtualChassis(object):
             if cfg_switch_type == "voq":
                 config_db.delete_entry("VOQ_INBAND_INTERFACE", f"{ibport}")
                 
+    def set_lag_id_boundaries(self, vct):
+        """This functions sets lag id boundaries in the chassis app db.
+        
+        In VOQ systems the lag id boundaries need to be set before configuring any PortChannels.
+        The lag id boundaries are used by lag id allocator while adding a PortChannel to the asic db.
+        Note:
+            In real systems, the lag id boundries are taken from a platform specific file. For testing
+            we assume the chassis capability with maximum 512 lags.
+        """
+
+        dvss = vct.dvss
+        for name in dvss.keys():
+            if name.startswith("supervisor"):
+                dvs = dvss[name]
+                chassis_app_db = DVSDatabase(swsscommon.CHASSIS_APP_DB, dvs.redis_chassis_sock)
+                chassis_app_db.db_connection.set("SYSTEM_LAG_ID_START", "1")
+                chassis_app_db.db_connection.set("SYSTEM_LAG_ID_END", "512")
+                break
+            
     def test_connectivity(self, vct):
         if vct is None:
             return
@@ -70,6 +90,9 @@ class TestVirtualChassis(object):
         are verified. For the System port config list, it is verified that all the 
         configured system ports are avaiable in the asic db by checking the count.
         """
+
+        if vct is None:
+            return
 
         dvss = vct.dvss
         for name in dvss.keys():
@@ -121,7 +144,10 @@ class TestVirtualChassis(object):
         supervisor card. An interface entry is used as sample database entry for verification
         of syncing mechanism.
         """
-        
+
+        if vct is None:
+            return 
+
         dvss = vct.dvss
         for name in dvss.keys():
             if name.startswith("supervisor"):
@@ -139,7 +165,10 @@ class TestVirtualChassis(object):
         and checking that the switch id of that remote system port does not match the local asic 
         switch id.
         """
-        
+
+        if vct is None:
+            return 
+
         dvss = vct.dvss
         for name in dvss.keys():
             dvs = dvss[name]
@@ -191,6 +220,9 @@ class TestVirtualChassis(object):
            (ii)  Local neighbor is synced to chassis ap db with assigned encap index
            (iii) Remote neighbor entry is created in ASIC_DB with received encap index
         """
+        
+        if vct is None:
+            return
 
         # We use Ethernet0 as inband port in each line card. In real hardware, this will be a
         # special port used for inband. For testing purpose, we need port record and rif record
@@ -248,7 +280,6 @@ class TestVirtualChassis(object):
                     break
                     
         # Verify neighbor record syncing with encap index       
-        dvss = vct.dvss
         for name in dvss.keys():
             if name.startswith("supervisor"):
                 dvs = dvss[name]
@@ -278,7 +309,6 @@ class TestVirtualChassis(object):
         # neigh in the kernel for the remote neighbor. The neighbor created in linecard 1  will be a 
         # remote neighbor in other linecards. Verity existence of the test neighbor in  linecards other 
         # than linecard 1
-        dvss = vct.dvss
         for name in dvss.keys():
             dvs = dvss[name]
 
@@ -345,6 +375,144 @@ class TestVirtualChassis(object):
                 
         # Cleanup
         self.del_inbandif_port(vct, inband_port)
+        
+    def test_chassis_system_lag(self, vct):
+        """Test portchannel in VOQ based chassis systems.
+        
+        This test validates that
+           (i)   PortChannel is created in local asic with system port aggregator id (system lag id)
+                     - Unique lag id is allocated from chassis app db in supervisor card
+                     - The unique lag id is sent in system port aggregator id attribute
+           (ii)  PortChannel members are successfully added in the PortChannel created 
+           (iii) Local PortChannel is synced in chassis app db
+           (iv)  PortChannel members addition is synced in the chassis app db
+           (v)   System LAG is created for the remote PortChannel with system lag id.
+           (vi)  System LAG of remote Portchannel has members with system port id
+        """
+        
+        if vct is None:
+            return
+       
+        test_lag_name = "PortChannel0001" 
+        test_lag_member = "Ethernet4"
+
+        # Set the lag id boundaries in the chassis ap db
+        self.set_lag_id_boundaries(vct)
+        
+        # Create a PortChannel in a line card 1 (owner line card)
+        dvss = vct.dvss
+        for name in dvss.keys():
+            dvs = dvss[name]
+
+            config_db = dvs.get_config_db()
+            metatbl = config_db.get_entry("DEVICE_METADATA", "localhost")
+            
+            # Get the host name and asic name for the system lag alias verification
+            cfg_hostname = metatbl.get("hostname")
+            assert cfg_hostname != "", "Got error in getting hostname from CONFIG_DB DEVICE_METADATA"
+
+            cfg_asic_name = metatbl.get("asic_name")
+            assert cfg_asic_name != "", "Got error in getting asic_name from CONFIG_DB DEVICE_METADATA"
+
+            cfg_switch_type = metatbl.get("switch_type")
+
+            # Neighbor record verifiation done in line card
+            if cfg_switch_type == "voq":    
+                lc_switch_id = metatbl.get("switch_id")
+                assert lc_switch_id != "", "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
+                if lc_switch_id == "0":
+                    
+                    # Create PortChannel
+                    app_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+                    psTbl_lag = swsscommon.ProducerStateTable(app_db, "LAG_TABLE")
+                    fvs = swsscommon.FieldValuePairs([("admin", "up"), ("mtu", "9100")])
+                    psTbl_lag.set(f"{test_lag_name}", fvs)
+                    
+                    time.sleep(1)
+
+                    # Add port channel member
+                    psTbl_lagMember = swsscommon.ProducerStateTable(app_db, "LAG_MEMBER_TABLE")
+                    fvs = swsscommon.FieldValuePairs([("status", "enabled")])
+                    psTbl_lagMember.set(f"{test_lag_name}:{test_lag_member}", fvs)
+                    
+                    time.sleep(1)
+                    
+                    # Verify creation of the PorChannel with voq system port aggregator id in asic db
+                    asic_db = dvs.get_asic_db()
+                    lagkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_LAG")
+                    assert len(lagkeys) == 1, "The LAG entry for configured portchannel is not available in asic db"
+                    
+                    # Check for the presence of voq system port aggregate id attribute
+                    lag_entry = asic_db.get_entry("ASIC_STATE:SAI_OBJECT_TYPE_LAG", lagkeys[0])
+                    spa_id = lag_entry.get("SAI_LAG_ATTR_SYSTEM_PORT_AGGREGATE_ID")
+                    assert spa_id != "", "VOQ System port aggregate id not present for the LAG"
+                    
+                    # Check for presence of lag member added
+                    lagmemberkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_LAG_MEMBER")
+                    assert len(lagmemberkeys) == 1, "The LAG member for configured portchannel is not available in asic db"
+                    
+                    break
+                
+        # Check syncing of the PortChannel and PortChannel member in chasiss app db
+        for name in dvss.keys():
+            if name.startswith("supervisor"):
+                dvs = dvss[name]
+                chassis_app_db = DVSDatabase(swsscommon.CHASSIS_APP_DB, dvs.redis_chassis_sock)
+                syslagkeys = chassis_app_db.get_keys("SYSTEM_LAG_TABLE")
+                assert len(syslagkeys) == 1, "System lag entry is not available in chassis app db"
+               
+                # system lag alias (key) should be unique across chassis. To ensure such uniqueness,
+                # the system lag name is derived from hostname, asic_name and portchannel name
+                # Verify for correct name
+                assert f"{cfg_hostname}|{cfg_asic_name}|{test_lag_name}" in syslagkeys[0], "Invalid unique system lag name"
+                
+                # Verify lag id of the system lag in chassis app db
+                syslag_entry = chassis_app_db.get_entry("SYSTEM_LAG_TABLE", syslagkeys[0])
+                remote_lag_id = syslag_entry.get("lag_id")
+                assert remote_lag_id != "", "Lag id is not present in the sytem lag table in chassis app db"
+                # This id must be same as the id allocated in owner linecard.
+                assert remote_lag_id == spa_id, "System lag id in chassis app db is not same as allocated lag id"
+                    
+                syslagmemberkeys = chassis_app_db.get_keys("SYSTEM_LAG_MEMBER_TABLE")
+                assert len(syslagmemberkeys) == 1, "No system lag member entries in chassis app db"
+                
+                break
+                
+        # Verify programming of remote system lag with received system lag id in non-owner line card
+        # Verify programming of lag menbers with system port id in non-owner line card
+        for name in dvss.keys():
+            dvs = dvss[name]
+
+            config_db = dvs.get_config_db()
+            metatbl = config_db.get_entry("DEVICE_METADATA", "localhost")
+
+            cfg_switch_type = metatbl.get("switch_type")
+
+            # System LAG info verifiation done in non-owner line card
+            if cfg_switch_type == "voq":    
+                lc_switch_id = metatbl.get("switch_id")
+                assert lc_switch_id != "", "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
+                if lc_switch_id != "0":
+                    # Linecard other than linecard 1 (owner line card)
+                    asic_db = dvs.get_asic_db()
+                    remotesyslagkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_LAG")
+                    assert len(remotesyslagkeys) == 1, "No remote system lag entries in ASIC_DB"
+                    
+                    remotesyslag_entry = asic_db.get_entry("ASIC_STATE:SAI_OBJECT_TYPE_LAG", remotesyslagkeys[0])
+                    remote_lag_id = remotesyslag_entry.get("SAI_LAG_ATTR_SYSTEM_PORT_AGGREGATE_ID")
+                    assert remote_lag_id != "", "Lag id not present in the remote syslag entry in asic db"
+                    assert remote_lag_id == spa_id, "Remote system lag programmed with wrong lag id"
+                    
+                    # Verify remote system lag has system port as member
+                    lagmemberkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_LAG_MEMBER")
+                    assert len(lagmemberkeys) == 1, "The LAG member for remote system lag is not available in asic db"
+                    
+                    remotelagmember_entry = asic_db.get_entry("ASIC_STATE:SAI_OBJECT_TYPE_LAG_MEMBER", lagmemberkeys[0])
+                    member_port_id = remotelagmember_entry.get("SAI_LAG_MEMBER_ATTR_PORT_ID")
+                    #Verify that the member is a system port
+                    assert "oid:0x5d" in member_port_id, "System LAG member is not system port"
+                    
+                    break
                     
 # Add Dummy always-pass test at end as workaroud
 # for issue when Flaky fail on final test it invokes module tear-down before retrying
