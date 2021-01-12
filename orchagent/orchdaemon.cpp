@@ -75,8 +75,15 @@ bool OrchDaemon::init()
 
     string platform = getenv("platform") ? getenv("platform") : "";
     TableConnector stateDbSwitchTable(m_stateDb, "SWITCH_CAPABILITY");
+    TableConnector app_switch_table(m_applDb, APP_SWITCH_TABLE_NAME);
+    TableConnector conf_asic_sensors(m_configDb, CFG_ASIC_SENSORS_TABLE_NAME);
 
-    gSwitchOrch = new SwitchOrch(m_applDb, APP_SWITCH_TABLE_NAME, stateDbSwitchTable);
+    vector<TableConnector> switch_tables = {
+        conf_asic_sensors,
+        app_switch_table
+    };
+
+    gSwitchOrch = new SwitchOrch(m_applDb, switch_tables, stateDbSwitchTable);
 
     const int portsorch_base_pri = 40;
 
@@ -88,11 +95,15 @@ bool OrchDaemon::init()
         { APP_LAG_MEMBER_TABLE_NAME,  portsorch_base_pri     }
     };
 
+    vector<table_name_with_pri_t> app_fdb_tables = {
+        { APP_FDB_TABLE_NAME,        FdbOrch::fdborch_pri},
+        { APP_VXLAN_FDB_TABLE_NAME,  FdbOrch::fdborch_pri}
+    };
+
     gCrmOrch = new CrmOrch(m_configDb, CFG_CRM_TABLE_NAME);
     gPortsOrch = new PortsOrch(m_applDb, ports_tables);
-    TableConnector applDbFdb(m_applDb, APP_FDB_TABLE_NAME);
     TableConnector stateDbFdb(m_stateDb, STATE_FDB_TABLE_NAME);
-    gFdbOrch = new FdbOrch(applDbFdb, stateDbFdb, gPortsOrch);
+    gFdbOrch = new FdbOrch(m_applDb, app_fdb_tables, stateDbFdb, gPortsOrch);
 
     vector<string> vnet_tables = {
             APP_VNET_RT_TABLE_NAME,
@@ -124,10 +135,12 @@ bool OrchDaemon::init()
     gIntfsOrch = new IntfsOrch(m_applDb, APP_INTF_TABLE_NAME, vrf_orch, m_chassisAppDb);
     gNeighOrch = new NeighOrch(m_applDb, APP_NEIGH_TABLE_NAME, gIntfsOrch, gFdbOrch, gPortsOrch, m_chassisAppDb);
 
-    vector<string> fgnhg_tables = {
-        CFG_FG_NHG,
-        CFG_FG_NHG_PREFIX,
-        CFG_FG_NHG_MEMBER
+    const int fgnhgorch_pri = 15;
+
+    vector<table_name_with_pri_t> fgnhg_tables = {
+        { CFG_FG_NHG,                 fgnhgorch_pri },
+        { CFG_FG_NHG_PREFIX,          fgnhgorch_pri },
+        { CFG_FG_NHG_MEMBER,          fgnhgorch_pri }
     };
 
     gFgNhgOrch = new FgNhgOrch(m_configDb, m_applDb, m_stateDb, fgnhg_tables, gNeighOrch, gIntfsOrch, vrf_orch);

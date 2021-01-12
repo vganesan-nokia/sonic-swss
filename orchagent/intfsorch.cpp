@@ -41,7 +41,6 @@ const int intfsorch_pri = 35;
 #define RIF_FLEX_STAT_COUNTER_POLL_MSECS "1000"
 #define UPDATE_MAPS_SEC 1
 
-#define LOOPBACK_PREFIX     "Loopback"
 
 static const vector<sai_router_interface_stat_t> rifStatIds =
 {
@@ -60,7 +59,7 @@ IntfsOrch::IntfsOrch(DBConnector *db, string tableName, VRFOrch *vrf_orch, DBCon
 {
     SWSS_LOG_ENTER();
 
-    /* Initialize DB connectors */ 
+    /* Initialize DB connectors */
     m_counter_db = shared_ptr<DBConnector>(new DBConnector("COUNTERS_DB", 0));
     m_flex_db = shared_ptr<DBConnector>(new DBConnector("FLEX_COUNTER_DB", 0));
     m_asic_db = shared_ptr<DBConnector>(new DBConnector("ASIC_DB", 0));
@@ -618,7 +617,7 @@ void IntfsOrch::doTask(Consumer &consumer)
                     SWSS_LOG_ERROR("Invalid mac argument %s to %s()", value.c_str(), e.what());
                     continue;
                 }
-            }  
+            }
             else if (field == "nat_zone")
             {
                 try
