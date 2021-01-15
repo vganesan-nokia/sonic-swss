@@ -4742,7 +4742,7 @@ bool PortsOrch::getSystemPorts()
                 return false;
             }
 
-            SWSS_LOG_NOTICE("SystemPort(0x%lx) - port_id:%u, switch_id:%u, core:%u, core_port:%u, speed:%u, voqs:%u",
+            SWSS_LOG_NOTICE("SystemPort(0x%" PRIx64 ") - port_id:%u, switch_id:%u, core:%u, core_port:%u, speed:%u, voqs:%u",
                             system_port_list[i],
                             attr.value.sysportconfig.port_id,
                             attr.value.sysportconfig.attached_switch_id,
