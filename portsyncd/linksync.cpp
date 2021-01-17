@@ -30,6 +30,7 @@ using namespace swss;
 const string MGMT_PREFIX = "eth";
 const string INTFS_PREFIX = "Ethernet";
 const string LAG_PREFIX = "PortChannel";
+const string INBAND_PREFIX = "Inband";
 
 extern set<string> g_portSet;
 extern bool g_init;
@@ -167,7 +168,8 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
 
     if (key.compare(0, INTFS_PREFIX.length(), INTFS_PREFIX) &&
         key.compare(0, LAG_PREFIX.length(), LAG_PREFIX) &&
-        key.compare(0, MGMT_PREFIX.length(), MGMT_PREFIX))
+        key.compare(0, MGMT_PREFIX.length(), MGMT_PREFIX) &&
+        key.compare(0, INBAND_PREFIX.length(), INBAND_PREFIX))
     {
         return;
     }
@@ -253,8 +255,10 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
         FieldValueTuple tuple("state", "ok");
         vector<FieldValueTuple> vector;
         vector.push_back(tuple);
+        FieldValueTuple op("netdev_oper_status", oper ? "up" : "down");
+        vector.push_back(op);
         m_statePortTable.set(key, vector);
-        SWSS_LOG_NOTICE("Publish %s(ok) to state db", key.c_str());
+        SWSS_LOG_NOTICE("Publish %s(ok:%s) to state db", key.c_str(), oper ? "up" : "down");
     }
     else
     {
