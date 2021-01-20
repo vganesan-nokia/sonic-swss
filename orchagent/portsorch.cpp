@@ -4053,11 +4053,11 @@ bool PortsOrch::removeLag(Port lag)
         if (lag.m_system_lag_info.switch_id == gVoqMySwitchId)
         {
             m_lagIdAllocator->lagIdDel(lag.m_system_lag_info.alias);
+
+            // Sync to SYSTEM_LAG_TABLE of CHASSIS_APP_DB
+
+            voqSyncDelLag(lag);
         }
-
-        // Sync to SYSTEM_LAG_TABLE of CHASSIS_APP_DB
-
-        voqSyncDelLag(lag);
     }
 
     return true;
