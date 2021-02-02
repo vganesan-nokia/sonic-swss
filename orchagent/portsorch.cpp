@@ -1394,6 +1394,12 @@ bool PortsOrch::setPortPvid(Port &port, sai_uint32_t pvid)
         return true;
     }
 
+    if(port.m_type == Port::SYSTEM)
+    {
+        SWSS_LOG_INFO("pvid setting for system port %s is not applicable", port.m_alias.c_str());
+        return true;
+    }
+
     if (port.m_rif_id)
     {
         SWSS_LOG_ERROR("pvid setting for router interface %s is not allowed", port.m_alias.c_str());
