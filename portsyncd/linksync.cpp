@@ -30,7 +30,6 @@ using namespace swss;
 const string MGMT_PREFIX = "eth";
 const string INTFS_PREFIX = "Ethernet";
 const string LAG_PREFIX = "PortChannel";
-const string INBAND_PREFIX = "Inband";
 
 extern set<string> g_portSet;
 extern bool g_init;
@@ -168,8 +167,7 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
 
     if (key.compare(0, INTFS_PREFIX.length(), INTFS_PREFIX) &&
         key.compare(0, LAG_PREFIX.length(), LAG_PREFIX) &&
-        key.compare(0, MGMT_PREFIX.length(), MGMT_PREFIX) &&
-        key.compare(0, INBAND_PREFIX.length(), INBAND_PREFIX))
+        key.compare(0, MGMT_PREFIX.length(), MGMT_PREFIX))
     {
         return;
     }
