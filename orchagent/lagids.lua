@@ -4,9 +4,9 @@
 -- ARGV[3] - current lag id (for "add" operation only)
 
 -- return lagid if success for "add"/"del"
--- return 0 if lag not exists for "del"
+-- return 0 if lag does not exist for "del"
 -- return -1 if lag table full for "add"
--- return -2 if log does exist for "get"
+-- return -2 if lag does not exist for "get"
 -- return -3 if invalid operation
 
 local op = ARGV[1]
@@ -24,8 +24,7 @@ if op == "add" then
     if dblagid then
         dblagid = tonumber(dblagid)
         if plagid == 0 then
-            -- no lagid propsed. Return the existing lagid
-            redis.call("sadd", "SYSTEM_LAG_ID_SET", tostring(dblagid))
+            -- no lagid proposed. Return the existing lagid
             return dblagid
         end
     end
@@ -34,7 +33,6 @@ if op == "add" then
     if plagid >= lagid_start and plagid <= lagid_end then
         if plagid == dblagid then
             -- proposed lagid is same as the lagid in database
-            redis.call("sadd", "SYSTEM_LAG_ID_SET", tostring(plagid))
             return plagid
         end
         -- proposed lag id is different than that in database OR
