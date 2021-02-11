@@ -1093,7 +1093,6 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
                 }
                 else
                 {
-                    SWSS_LOG_ERROR("Failed to add voq neighbor %s to SAI", kfvKey(t).c_str());
                     it++;
                 }
             }
@@ -1118,7 +1117,6 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
                 }
                 else
                 {
-                    SWSS_LOG_ERROR("Failed to remove voq neighbor %s from SAI", kfvKey(t).c_str());
                     it++;
                 }
             }

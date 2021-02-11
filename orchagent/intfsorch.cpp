@@ -1363,9 +1363,10 @@ bool IntfsOrch::isRemoteSystemPortIntf(string alias)
     Port port;
     if(gPortsOrch->getPort(alias, port))
     {
-
         if (port.m_type == Port::LAG)
+        {
             return(port.m_system_lag_info.switch_id != gVoqMySwitchId);
+        }
 
         return(port.m_system_port_info.type == SAI_SYSTEM_PORT_TYPE_REMOTE);
     }

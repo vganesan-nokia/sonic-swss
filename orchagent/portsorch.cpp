@@ -4058,7 +4058,16 @@ bool PortsOrch::removeLag(Port lag)
 
         if (lag.m_system_lag_info.switch_id == gVoqMySwitchId)
         {
-            m_lagIdAllocator->lagIdDel(lag.m_system_lag_info.alias);
+            int32_t rv;
+            int32_t spa_id = lag.m_system_lag_info.spa_id;
+
+            rv = m_lagIdAllocator->lagIdDel(lag.m_system_lag_info.alias);
+
+            if (rv != spa_id)
+            {
+                SWSS_LOG_ERROR("Failed to delete LAG id %d of local lag %s rv:%d", spa_id, lag.m_alias.c_str(), rv);
+                return false;
+            }
 
             // Sync to SYSTEM_LAG_TABLE of CHASSIS_APP_DB
 
