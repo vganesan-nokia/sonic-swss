@@ -380,8 +380,121 @@ class TestVirtualChassis(object):
                     assert is_local == "false", "is_local attribute is true for remote neigh"
                     
                     break
+
+    def test_chassis_system_neigh_del(self, vct):
+        """Test neigh record deletion and syncing to chassis app db.
+        
+        Pre-requisites:
+            (i)   Test case: test_chassis_system_neigh
+        This test validates that:
+            (i)   Local neighbor entry is deleted when neighbor is deleted
+            (ii)  Local neighbor delete is synced to chassis ap db
+            (iii) Remote neighbor entry is cleared in ASIC_DB
+        """
+
+        inband_port = "Ethernet0"
+
+        # Test neighbor on Ethernet4 since Ethernet0 is used as Inband port
+        test_neigh_dev = "Ethernet4"
+        test_neigh_ip = "10.8.104.3"
+
+        dvss = vct.dvss
+        for name in dvss.keys():
+            dvs = dvss[name]
+
+            config_db = dvs.get_config_db()
+            metatbl = config_db.get_entry("DEVICE_METADATA", "localhost")
+
+            cfg_switch_type = metatbl.get("switch_type")
+
+            # Neighbor record verifiation done in line card
+            if cfg_switch_type == "voq":    
+                lc_switch_id = metatbl.get("switch_id")
+                assert lc_switch_id != "", "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
+                if lc_switch_id == "0":
+
+                    # Delete the static neighbor neighbor
+                    _, res = dvs.runcmd(['sh', "-c", f"ip neigh del {test_neigh_ip} dev {test_neigh_dev}"])
+                    assert res == "", "Error deleting static neigh"
+
+                    # Check for presence of the neighbor in ASIC_DB. The deleted neighbor should
+                    # not be present in the asic db
+                    asic_db = dvs.get_asic_db()
+                    neighkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY")
+                    
+                    test_neigh = ""
+                    for nkey in neighkeys:
+                        ne = ast.literal_eval(nkey)
+                        if ne['ip'] == test_neigh_ip:
+                            test_neigh = nkey
+                            break
+                        
+                    assert test_neigh == "", "Stale neigh entry found in ASIC_DB"
+
+                    break
+                    
+        # Verify syncing of neighbor record delete in chassis app db
+        dvss = vct.dvss
+        for name in dvss.keys():
+            if name.startswith("supervisor"):
+                dvs = dvss[name]
+                chassis_app_db = DVSDatabase(swsscommon.CHASSIS_APP_DB, dvs.redis_chassis_sock)
+                sysneighkeys = chassis_app_db.get_keys("SYSTEM_NEIGH")
                 
-        # Cleanup
+                test_sysneigh = ""
+                for sysnk in sysneighkeys:
+                    sysnk_tok = sysnk.split("|")
+                    assert len(sysnk_tok) == 3, "Invalid system neigh key in chassis app db"
+                    if sysnk_tok[2] == test_neigh_ip:
+                        test_sysneigh = sysnk
+                        break
+                
+                assert test_sysneigh == "", "Stale neigh entry in chassis app db"
+
+                break
+            
+        # Verify clearing of remote neighbor in non-owner linecard
+        dvss = vct.dvss
+        for name in dvss.keys():
+            dvs = dvss[name]
+
+            config_db = dvs.get_config_db()
+            metatbl = config_db.get_entry("DEVICE_METADATA", "localhost")
+
+            cfg_switch_type = metatbl.get("switch_type")
+
+            # Neighbor record verifiation done in line card
+            if cfg_switch_type == "voq":    
+                lc_switch_id = metatbl.get("switch_id")
+                assert lc_switch_id != "", "Got error in getting switch_id from CONFIG_DB DEVICE_METADATA"
+                if lc_switch_id != "0":
+                    # Linecard other than linecard 1
+
+                    # Check for presence of the remote neighbor in ASIC_DB. The remote neighbor corresponding
+                    # to the deleted static neigbor should not be present
+                    asic_db = dvs.get_asic_db()
+                    neighkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY")
+                    
+                    remote_neigh = ""
+                    for nkey in neighkeys:
+                        ne = ast.literal_eval(nkey)
+                        if ne['ip'] == test_neigh_ip:
+                            remote_neigh = nkey
+                            break
+                        
+                    assert remote_neigh == "", "Stale remote neigh in ASIC_DB"
+                    
+                    # Check for kernel entries. Kernel entries (neigh and route) should have been removed
+
+                    _, output = dvs.runcmd("ip neigh show")
+                    assert f"{test_neigh_ip} dev {inband_port}" not in output, "Kernel neigh of remote neighbor not removed"
+
+                    _, output = dvs.runcmd("ip route show")
+                    assert f"{test_neigh_ip} dev {inband_port} scope link" not in output, "Kernel route of remote neighbor not removed"
+                    
+                    break
+
+        # Cleanup inband if configuration
         self.del_inbandif_port(vct, inband_port)
         
     def test_chassis_system_lag(self, vct):
