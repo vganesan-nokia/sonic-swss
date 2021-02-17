@@ -391,6 +391,9 @@ void NbrMgr::doStateSystemNeighTask(Consumer &consumer)
             if (!addKernelNeigh(nbr_odev, ip_address, mac_address))
             {
                 SWSS_LOG_ERROR("Neigh entry add on dev %s failed for '%s'", nbr_odev.c_str(), kfvKey(t).c_str());
+                // Delete neigh to take care of deletion of exiting nbr for mac change. This makes sure that
+                // re-try will be successful and route addtion (below) will be attempted and be successful
+                delKernelNeigh(nbr_odev, ip_address);
                 it++;
                 continue;
             }
