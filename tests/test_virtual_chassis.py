@@ -213,12 +213,15 @@ class TestVirtualChassis(object):
                     assert spcfginfo["attached_switch_id"] != lc_switch_id, "RIF system port with wrong switch_id"
 
     def test_chassis_system_neigh(self, vct):
-        """Test neigh record creation and syncing to chassis app db.
+        """Test neigh record create/delete and syncing to chassis app db.
 
         This test validates that:
            (i)   Local neighbor entry is created with encap index
            (ii)  Local neighbor is synced to chassis ap db with assigned encap index
            (iii) Remote neighbor entry is created in ASIC_DB with received encap index
+           (iv)  Local neighbor entry is deleted when neighbor is deleted
+           (v)   Local neighbor delete is synced to chassis ap db
+           (vi)  Remote neighbor entry is cleared in ASIC_DB
         """
         
         if vct is None:
@@ -381,24 +384,7 @@ class TestVirtualChassis(object):
                     
                     break
 
-    def test_chassis_system_neigh_del(self, vct):
-        """Test neigh record deletion and syncing to chassis app db.
-        
-        Pre-requisites:
-            (i)   Test case: test_chassis_system_neigh
-        This test validates that:
-            (i)   Local neighbor entry is deleted when neighbor is deleted
-            (ii)  Local neighbor delete is synced to chassis ap db
-            (iii) Remote neighbor entry is cleared in ASIC_DB
-        """
-
-        inband_port = "Ethernet0"
-
-        # Test neighbor on Ethernet4 since Ethernet0 is used as Inband port
-        test_neigh_dev = "Ethernet4"
-        test_neigh_ip = "10.8.104.3"
-
-        dvss = vct.dvss
+        # Verify system neighbor delete and clearing
         for name in dvss.keys():
             dvs = dvss[name]
 
