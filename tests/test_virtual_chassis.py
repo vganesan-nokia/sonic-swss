@@ -278,6 +278,9 @@ class TestVirtualChassis(object):
 
                     assert test_neigh != "", "Neigh not found in ASIC_DB"
 
+                    # Preserve test neigh asic db key for delete verification later
+                    test_neigh_asic_db_key = test_neigh
+
                     # Check for presence of encap index, retrieve and store it for sync verification
                     test_neigh_entry = asic_db.wait_for_entry("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY", test_neigh)
                     test_neigh_entry_attrs = asic_db.wait_for_fields("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY", test_neigh, ["SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX"])
@@ -308,6 +311,9 @@ class TestVirtualChassis(object):
 
                 assert test_sysneigh != "", "Neigh is not sync-ed to chassis app db"
 
+                # Preserve test sys neigh chassis app db key for delete verification later
+                test_sysneigh_chassis_app_db_key = test_sysneigh
+
                 test_sysneigh_entry = chassis_app_db.get_entry("SYSTEM_NEIGH", test_sysneigh)
                 sys_neigh_encap_index = test_sysneigh_entry.get("encap_index")
                 assert sys_neigh_encap_index != "", "System neigh in chassis app db does not have encap index"
@@ -335,6 +341,7 @@ class TestVirtualChassis(object):
                 if lc_switch_id != "0":
                     # Linecard other than linecard 1
                     asic_db = dvs.get_asic_db()
+                    asic_db.wait_for_n_keys("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY", 1)
                     neighkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY")
                     assert len(neighkeys), "No neigh entries in ASIC_DB"
                     
@@ -347,6 +354,9 @@ class TestVirtualChassis(object):
                             break
                         
                     assert remote_neigh != "", "Remote neigh not found in ASIC_DB"
+
+                    # Preserve remote neigh asic db neigh key for delete verification later
+                    test_remote_neigh_asic_db_key = remote_neigh
                     
                     # Check for kernel entries
 
@@ -406,16 +416,8 @@ class TestVirtualChassis(object):
                     # Check for presence of the neighbor in ASIC_DB. The deleted neighbor should
                     # not be present in the asic db
                     asic_db = dvs.get_asic_db()
-                    neighkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY")
-                    
-                    test_neigh = ""
-                    for nkey in neighkeys:
-                        ne = ast.literal_eval(nkey)
-                        if ne['ip'] == test_neigh_ip:
-                            test_neigh = nkey
-                            break
-                        
-                    assert test_neigh == "", "Stale neigh entry found in ASIC_DB"
+                    neighkeys = asic_db.wait_for_deleted_entry("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY", test_neigh_asic_db_key)
+                    assert len(neighkeys) == 0, "Stale neigh entry found in ASIC_DB"
 
                     break
                     
@@ -425,17 +427,8 @@ class TestVirtualChassis(object):
             if name.startswith("supervisor"):
                 dvs = dvss[name]
                 chassis_app_db = DVSDatabase(swsscommon.CHASSIS_APP_DB, dvs.redis_chassis_sock)
-                sysneighkeys = chassis_app_db.get_keys("SYSTEM_NEIGH")
-                
-                test_sysneigh = ""
-                for sysnk in sysneighkeys:
-                    sysnk_tok = sysnk.split("|")
-                    assert len(sysnk_tok) == 3, "Invalid system neigh key in chassis app db"
-                    if sysnk_tok[2] == test_neigh_ip:
-                        test_sysneigh = sysnk
-                        break
-                
-                assert test_sysneigh == "", "Stale neigh entry in chassis app db"
+                sysneighkeys = chassis_app_db.wait_for_deleted_entry("SYSTEM_NEIGH", test_sysneigh_chassis_app_db_key)
+                assert len(sysneighkeys) == 0, "Stale neigh entry in chassis app db"
 
                 break
             
@@ -459,16 +452,8 @@ class TestVirtualChassis(object):
                     # Check for presence of the remote neighbor in ASIC_DB. The remote neighbor corresponding
                     # to the deleted static neigbor should not be present
                     asic_db = dvs.get_asic_db()
-                    neighkeys = asic_db.get_keys("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY")
-                    
-                    remote_neigh = ""
-                    for nkey in neighkeys:
-                        ne = ast.literal_eval(nkey)
-                        if ne['ip'] == test_neigh_ip:
-                            remote_neigh = nkey
-                            break
-                        
-                    assert remote_neigh == "", "Stale remote neigh in ASIC_DB"
+                    neighkeys = asic_db.wait_for_deleted_entry("ASIC_STATE:SAI_OBJECT_TYPE_NEIGHBOR_ENTRY", test_remote_neigh_asic_db_key)
+                    assert len(neighkeys) == 0, "Stale remote neigh in ASIC_DB"
                     
                     # Check for kernel entries. Kernel entries (neigh and route) should have been removed
 

@@ -1199,11 +1199,6 @@ bool NeighOrch::addInbandNeighbor(string alias, IpAddress ip_address)
     memcpy(attr.value.mac, inband_mac.getMac(), 6);
     neighbor_attrs.push_back(attr);
 
-    if(!addVoqEncapIndex(alias, ip_address, neighbor_attrs))
-    {
-        return false;
-    }
-
     //No host route for neighbor of the Inband IP address
     attr.id = SAI_NEIGHBOR_ENTRY_ATTR_NO_HOST_ROUTE;
     attr.value.booldata = true;
