@@ -27,6 +27,7 @@ struct NeighborData
 {
     MacAddress    mac;
     bool          hw_configured = false; // False means, entry is not written to HW
+    uint32_t      voq_encap_index = 0;
 };
 
 /* NeighborTable: NeighborEntry, neighbor MAC address */

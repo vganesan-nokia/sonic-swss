@@ -783,16 +783,16 @@ bool NeighOrch::addNeighbor(const NeighborEntry &neighborEntry, const MacAddress
     MuxOrch* mux_orch = gDirectory.get<MuxOrch*>();
     bool hw_config = isHwConfigured(neighborEntry);
 
+    if (gMySwitchType == "voq")
+    {
+        if (!addVoqEncapIndex(alias, ip_address, neighbor_attrs))
+        {
+            return false;
+        }
+    }
+
     if (!hw_config && mux_orch->isNeighborActive(ip_address, macAddress, alias))
     {
-        if (gMySwitchType == "voq")
-        {
-            if (!addVoqEncapIndex(alias, ip_address, neighbor_attrs))
-            {
-                return false;
-            }
-        }
-
         status = sai_neighbor_api->create_neighbor_entry(&neighbor_entry,
                                    (uint32_t)neighbor_attrs.size(), neighbor_attrs.data());
         if (status != SAI_STATUS_SUCCESS)
@@ -1230,8 +1230,30 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
             }
 
             if (m_syncdNeighbors.find(neighbor_entry) == m_syncdNeighbors.end() ||
-                    m_syncdNeighbors[neighbor_entry].mac != mac_address)
+                    m_syncdNeighbors[neighbor_entry].mac != mac_address ||
+                    m_syncdNeighbors[neighbor_entry].voq_encap_index != encap_index)
             {
+                // Handle encap index change. SAI does not support change of encap index for
+                // existing neighbors. Remove the neighbor but do not errase from consumer sync
+                // buffer. The next iteration will add the neighbor back with new encap index
+
+                if (m_syncdNeighbors.find(neighbor_entry) != m_syncdNeighbors.end() &&
+                    m_syncdNeighbors[neighbor_entry].voq_encap_index != encap_index)
+                {
+                    //Remove neigh from SAI
+                    if (removeNeighbor(neighbor_entry))
+                    {
+                        //neigh successfully deleted from SAI. Set STATE DB to signal to remove entries from kernel
+                        m_stateSystemNeighTable->del(state_key);
+                    }
+                    else
+                    {
+                        SWSS_LOG_ERROR("Failed to remove voq neighbor %s from SAI during encap index change", kfvKey(t).c_str());
+                    }
+                    it++;
+                    continue;
+                }
+
                 //Add neigh to SAI
                 if (addNeighbor(neighbor_entry, mac_address))
                 {
@@ -1467,6 +1489,27 @@ void NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacA
     sai_attribute_t attr;
     sai_status_t status;
 
+    // Get the encap index and store it for handling change of
+    // encap index for remote neighbors synced via CHASSIS_APP_DB
+
+    attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX;
+
+    status = sai_neighbor_api->get_neighbor_entry_attribute(&neighbor_entry, 1, &attr);
+    if (status != SAI_STATUS_SUCCESS)
+    {
+        SWSS_LOG_ERROR("Failed to get neighbor attribute for %s on %s, rv:%d", ip_address.to_string().c_str(), alias.c_str(), status);
+        return;
+    }
+
+    if (!attr.value.u32)
+    {
+        SWSS_LOG_ERROR("Invalid neighbor encap_index for %s on %s", ip_address.to_string().c_str(), alias.c_str());
+        return;
+    }
+
+    NeighborEntry nbrEntry = {ip_address, alias};
+    m_syncdNeighbors[nbrEntry].voq_encap_index = attr.value.u32;
+
     //Sync only local neigh. Confirm for the local neigh and
     //get the system port alias for key for syncing to CHASSIS_APP_DB
     Port port;
@@ -1492,21 +1535,6 @@ void NeighOrch::voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacA
     else
     {
         SWSS_LOG_ERROR("Port does not exist for %s!", alias.c_str());
-        return;
-    }
-
-    attr.id = SAI_NEIGHBOR_ENTRY_ATTR_ENCAP_INDEX;
-
-    status = sai_neighbor_api->get_neighbor_entry_attribute(&neighbor_entry, 1, &attr);
-    if (status != SAI_STATUS_SUCCESS)
-    {
-        SWSS_LOG_ERROR("Failed to get neighbor attribute for %s on %s, rv:%d", ip_address.to_string().c_str(), alias.c_str(), status);
-        return;
-    }
-
-    if (!attr.value.u32)
-    {
-        SWSS_LOG_ERROR("Invalid neighbor encap_index for %s on %s", ip_address.to_string().c_str(), alias.c_str());
         return;
     }
 
