@@ -109,6 +109,7 @@ private:
     bool addVoqEncapIndex(string &alias, IpAddress &ip, vector<sai_attribute_t> &neighbor_attrs);
     void voqSyncAddNeigh(string &alias, IpAddress &ip_address, const MacAddress &mac, sai_neighbor_entry_t &neighbor_entry);
     void voqSyncDelNeigh(string &alias, IpAddress &ip_address);
+    bool updateVoqNeighborEncapIndex(const NeighborEntry &neighborEntry, uint32_t encap_index);
 
     bool resolveNeighborEntry(const NeighborEntry &, const MacAddress &);
     void clearResolvedNeighborEntry(const NeighborEntry &);
