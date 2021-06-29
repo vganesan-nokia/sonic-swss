@@ -1255,7 +1255,7 @@ void NeighOrch::doVoqSystemNeighTask(Consumer &consumer)
                         }
                         else
                         {
-                            SWSS_LOG_ERROR("Failed to remove voq neighbor %s from SAI during encap index change", kfvKey(t).c_str());
+                            SWSS_LOG_ERROR("Failed to remove voq neighbor %s from SAI during encap index update", kfvKey(t).c_str());
                         }
                         it++;
                     }
