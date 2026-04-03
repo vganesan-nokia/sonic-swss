@@ -82,6 +82,7 @@ uint32_t gCfgSystemPorts = 0;
 string gMyHostName = "";
 string gMyAsicName = "";
 bool gTraditionalFlexCounter = false;
+bool gRouteStateAsyncPublish = true;
 uint32_t create_switch_timeout = 0;
 bool gMultiAsicVoq = false;
 
@@ -119,6 +120,7 @@ void usage()
     cout << "    -R enable the ring thread feature" << endl;
     cout << "    -M enable SAI MACSec POST" << endl;
     cout << "    -D Delay in seconds before flex counter processing begins after orchagent startup (default 0)" << endl;
+    cout << "    -a disable async route state publish (default: async enabled)" << endl;
 }
 
 void sighup_handler(int signo)
@@ -595,6 +597,9 @@ int main(int argc, char **argv)
             break;
          case 'M':
             macsec_post_enabled = true;
+            break;
+        case 'a':
+            gRouteStateAsyncPublish = false;
             break;
         case 'D': { gFlexCounterDelaySec = swss::to_int<int>(optarg); } break;
         default: /* '?' */
