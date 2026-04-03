@@ -81,6 +81,7 @@ uint32_t gCfgSystemPorts = 0;
 string gMyHostName = "";
 string gMyAsicName = "";
 bool gTraditionalFlexCounter = false;
+bool gRouteStateAsyncPublish = true;
 uint32_t create_switch_timeout = 0;
 bool gMultiAsicVoq = false;
 
@@ -91,7 +92,7 @@ bool isChassisDbInUse()
 
 void usage()
 {
-    cout << "usage: orchagent [-h] [-r record_type] [-d record_location] [-f swss_rec_filename] [-j sairedis_rec_filename] [-b batch_size] [-m MAC] [-i INST_ID] [-s] [-z mode] [-k bulk_size] [-q zmq_server_address] [-c mode] [-t create_switch_timeout] [-v VRF] [-I heart_beat_interval] [-R] [-M]" << endl;
+    cout << "usage: orchagent [-h] [-r record_type] [-d record_location] [-f swss_rec_filename] [-j sairedis_rec_filename] [-b batch_size] [-m MAC] [-i INST_ID] [-s] [-z mode] [-k bulk_size] [-q zmq_server_address] [-c mode] [-t create_switch_timeout] [-v VRF] [-I heart_beat_interval] [-R] [-M] [-a]" << endl;
     cout << "    -h: display this message" << endl;
     cout << "    -r record_type: record orchagent logs with type (default 3)" << endl;
     cout << "                    Bit 0: sairedis.rec, Bit 1: swss.rec, Bit 2: responsepublisher.rec. For example:" << endl;
@@ -117,6 +118,7 @@ void usage()
     cout << "    -R enable the ring thread feature" << endl;
     cout << "    -M enable SAI MACSec POST" << endl;
     cout << "    -D Delay in seconds before flex counter processing begins after orchagent startup (default 0)" << endl;
+    cout << "    -a disable async route state publish (default: async enabled)" << endl;
 }
 
 void sighup_handler(int signo)
@@ -400,7 +402,7 @@ int main(int argc, char **argv)
     // Disable SAI MACSec POST by default. Use option -M to enable it.
     bool macsec_post_enabled = false;
 
-    while ((opt = getopt(argc, argv, "b:m:r:f:j:d:i:hsz:k:q:c:t:v:I:RD:M")) != -1)
+    while ((opt = getopt(argc, argv, "b:m:r:f:j:d:i:hsz:k:q:c:t:v:I:RD:Ma")) != -1)
     {
         switch (opt)
         {
@@ -520,6 +522,9 @@ int main(int argc, char **argv)
             break;
          case 'M':
             macsec_post_enabled = true;
+            break;
+        case 'a':
+            gRouteStateAsyncPublish = false;
             break;
         case 'D': { gFlexCounterDelaySec = swss::to_int<int>(optarg); } break;
         default: /* '?' */
