@@ -120,7 +120,6 @@ void usage()
     cout << "    -R enable the ring thread feature" << endl;
     cout << "    -M enable SAI MACSec POST" << endl;
     cout << "    -D Delay in seconds before flex counter processing begins after orchagent startup (default 0)" << endl;
-    cout << "    -a disable async route state publish (default: async enabled)" << endl;
 }
 
 void sighup_handler(int signo)
@@ -276,6 +275,35 @@ void getCfgSwitchType(DBConnector *cfgDb, string &switch_type, string &switch_su
         SWSS_LOG_ERROR("System error in parsing switch subtype: %s", e.what());
     }
 
+}
+
+/*
+ * DEVICE_METADATA|localhost route_state_async_publish: if value is "disabled", turn off async route state publish.
+ * Otherwise keep default gRouteStateAsyncPublish == true. Must run before OrchDaemon::init() constructs RouteOrch.
+ */
+void getCfgRouteStateAsyncPublish(DBConnector *cfgDb)
+{
+    Table cfgDeviceMetaDataTable(cfgDb, CFG_DEVICE_METADATA_TABLE_NAME);
+    string val;
+
+    try
+    {
+        if (!cfgDeviceMetaDataTable.hget("localhost", "route_state_async_publish", val))
+        {
+            return;
+        }
+    }
+    catch (const std::system_error &e)
+    {
+        SWSS_LOG_WARN("Could not read route_state_async_publish from CONFIG_DB: %s; default enabled", e.what());
+        return;
+    }
+
+    if (val == "disabled")
+    {
+        gRouteStateAsyncPublish = false;
+        SWSS_LOG_NOTICE("route_state_async_publish is disabled in DEVICE_METADATA|localhost; synchronous route state publish");
+    }
 }
 
 bool isChassisAppDbPresent()
@@ -597,9 +625,6 @@ int main(int argc, char **argv)
             break;
          case 'M':
             macsec_post_enabled = true;
-            break;
-        case 'a':
-            gRouteStateAsyncPublish = false;
             break;
         case 'D': { gFlexCounterDelaySec = swss::to_int<int>(optarg); } break;
         default: /* '?' */
@@ -1020,6 +1045,8 @@ int main(int argc, char **argv)
         /* Initialize the ring before OrchDaemon initializing Orchs */
         orchDaemon->enableRingBuffer();
     }
+
+    getCfgRouteStateAsyncPublish(&config_db);
 
     if (!orchDaemon->init())
     {
