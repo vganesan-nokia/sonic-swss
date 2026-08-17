@@ -261,6 +261,8 @@ class WcmpManagerTest : public ::testing::Test
     }
 
     void UpdateWatchPort(const std::string& port, bool prune) {
+      wcmp_group_manager_->updatePortOperStatusMap(
+        port, prune ? SAI_PORT_OPER_STATUS_DOWN : SAI_PORT_OPER_STATUS_UP);
       wcmp_group_manager_->updateWatchPort(port, prune);
     }
 
@@ -268,14 +270,14 @@ class WcmpManagerTest : public ::testing::Test
 
     void PruneNextHops(const std::string &port)
     {
-      wcmp_group_manager_->updateWatchPort(port, true);
-      wcmp_group_manager_->processWatchPortEvent();
+      UpdateWatchPort(port, /*prune=*/true);
+      ProcessWatchPortEvent();
     }
 
     void RestorePrunedNextHops(const std::string &port)
     {
-      wcmp_group_manager_->updateWatchPort(port, false);
-      wcmp_group_manager_->processWatchPortEvent();
+      UpdateWatchPort(port, /*prune=*/false);
+      ProcessWatchPortEvent();
     }
 
     bool VerifyWcmpGroupMemberInPortMap(std::shared_ptr<P4WcmpGroupMemberEntry> gm, bool expected_member_present,

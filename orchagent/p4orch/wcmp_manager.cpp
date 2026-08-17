@@ -261,19 +261,24 @@ ReturnCode WcmpManager::fetchPortOperStatus(const std::string &port_name, sai_po
     return ReturnCode();
 }
 
-ReturnCode WcmpManager::fetchMemberInfo(P4WcmpGroupEntry* wcmp_group) {
+ReturnCode WcmpManager::populateMemberInfo(P4WcmpGroupEntry* wcmp_group) {
   for (auto& member : wcmp_group->wcmp_group_members) {
     if (!member->watch_port.empty()) {
       sai_port_oper_status_t oper_status = SAI_PORT_OPER_STATUS_DOWN;
       RETURN_IF_ERROR(fetchPortOperStatus(member->watch_port, &oper_status));
       if (oper_status != SAI_PORT_OPER_STATUS_UP) {
         member->pruned = true;
+      } else {
+        member->pruned = false;
       }
     }
 
-    m_p4OidMapper->getOID(SAI_OBJECT_TYPE_NEXT_HOP,
-                          KeyGenerator::generateNextHopKey(member->next_hop_id),
-                          &(member->next_hop_oid));
+    if (member->next_hop_oid == SAI_NULL_OBJECT_ID) {
+      m_p4OidMapper->getOID(
+          SAI_OBJECT_TYPE_NEXT_HOP,
+          KeyGenerator::generateNextHopKey(member->next_hop_id),
+          &(member->next_hop_oid));
+    }
   }
   return ReturnCode();
 }
@@ -523,7 +528,6 @@ void WcmpManager::updateWatchPort(const std::string& port, bool prune) {
                                     " in updateWatchPort");
         } else {
           const std::string update = prune ? "prune" : "restore";
-          member->pruned = prune;
           m_watchport_groups.insert(member->wcmp_group_id);
           SWSS_LOG_NOTICE("Queued watchport event: %s member %s from group %s",
                           update.c_str(), member->next_hop_id.c_str(),
@@ -541,13 +545,16 @@ void WcmpManager::processWatchPortEvent() {
   SWSS_LOG_ENTER();
 
   uint count = 0;
+  P4WcmpGroupEntry* entry;
   std::vector<P4WcmpGroupEntry> entries;
   auto it = m_watchport_groups.begin();
   while (it != m_watchport_groups.end()) {
     auto* wcmp_group_ptr = getWcmpGroupEntry(*it);
 
     if (wcmp_group_ptr != nullptr) {
-      entries.push_back(*wcmp_group_ptr);
+      entry = getWcmpGroupEntry(*it);
+      populateMemberInfo(entry);
+      entries.push_back(*entry);
     } else {
       SWSS_LOG_NOTICE("WCMP group %s no longer exists, skipping watchport update.", it->c_str());
     }
@@ -676,7 +683,7 @@ ReturnCode WcmpManager::drain() {
     }
 
     if (operation == SET_COMMAND) {
-      status = fetchMemberInfo(&app_db_entry);
+      status = populateMemberInfo(&app_db_entry);
       if (!status.ok()) {
         SWSS_LOG_ERROR(
             "Fail to get group member info for WCMP group with id %s: %s",

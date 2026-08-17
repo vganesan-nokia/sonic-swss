@@ -154,9 +154,9 @@ class WcmpManager : public ObjectManagerInterface
     // Gets port oper-status from port_oper_status_map if present
     bool getPortOperStatusFromMap(const std::string &port, sai_port_oper_status_t *status);
 
-    // Fetches group member info (pruned status, nexthop OID) that is required
+    // Populates group member info (pruned status, nexthop OID) that is required
     // before create or update.
-    ReturnCode fetchMemberInfo(P4WcmpGroupEntry* wcmp_group);
+    ReturnCode populateMemberInfo(P4WcmpGroupEntry* wcmp_group);
 
     // Verifies the internal cache for an entry.
     std::string verifyStateCache(const P4WcmpGroupEntry &app_db_entry, const P4WcmpGroupEntry *wcmp_group_entry);
