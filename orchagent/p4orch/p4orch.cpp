@@ -293,9 +293,8 @@ void P4Orch::handlePortStatusUpdate(const std::string& alias,
         return;
     }
 
-    // Update port oper-status in local map
-    m_wcmpManager->updatePortOperStatusMap(alias, status);
-    m_wcmpManager->updateWatchPort(alias, status != SAI_PORT_OPER_STATUS_UP);
+    // Update watchport
+    m_wcmpManager->updateWatchPort(alias, status);
 }
 
 void P4Orch::doTask(NotificationConsumer &consumer)

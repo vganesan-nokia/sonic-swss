@@ -261,9 +261,8 @@ class WcmpManagerTest : public ::testing::Test
     }
 
     void UpdateWatchPort(const std::string& port, bool prune) {
-      wcmp_group_manager_->updatePortOperStatusMap(
+      wcmp_group_manager_->updateWatchPort(
         port, prune ? SAI_PORT_OPER_STATUS_DOWN : SAI_PORT_OPER_STATUS_UP);
-      wcmp_group_manager_->updateWatchPort(port, prune);
     }
 
     void ProcessWatchPortEvent() { wcmp_group_manager_->processWatchPortEvent(); }
@@ -283,10 +282,10 @@ class WcmpManagerTest : public ::testing::Test
     bool VerifyWcmpGroupMemberInPortMap(std::shared_ptr<P4WcmpGroupMemberEntry> gm, bool expected_member_present,
                                         long unsigned int expected_set_size)
     {
-        auto it = wcmp_group_manager_->port_name_to_wcmp_group_member_map.find(gm->watch_port);
-        if (it != wcmp_group_manager_->port_name_to_wcmp_group_member_map.end())
+        auto it = wcmp_group_manager_->m_port_name_to_wcmp_group_member_map.find(gm->watch_port);
+        if (it != wcmp_group_manager_->m_port_name_to_wcmp_group_member_map.end())
         {
-            auto &s = wcmp_group_manager_->port_name_to_wcmp_group_member_map[gm->watch_port];
+            auto &s = wcmp_group_manager_->m_port_name_to_wcmp_group_member_map[gm->watch_port];
             if (s.size() != expected_set_size)
                 return false;
             return expected_member_present ? (s.count(gm) > 0) : (s.count(gm) == 0);
