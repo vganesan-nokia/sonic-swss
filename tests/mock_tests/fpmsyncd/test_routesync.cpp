@@ -907,11 +907,13 @@ TEST_F(FpmSyncdResponseTest, TestUpdateNextHopGroupDb)
         vector<FieldValueTuple> fieldValues;
         nexthop_group_table.get("1", fieldValues);
 
-        EXPECT_EQ(fieldValues.size(), 2);
+        EXPECT_EQ(fieldValues.size(), 3);
         EXPECT_EQ(fvField(fieldValues[0]), "nexthop");
         EXPECT_EQ(fvValue(fieldValues[0]), test_gateway);
         EXPECT_EQ(fvField(fieldValues[1]), "ifname");
         EXPECT_EQ(fvValue(fieldValues[1]), "Ethernet0");
+        EXPECT_EQ(fvField(fieldValues[2]), "nexthop_id");
+        EXPECT_EQ(fvValue(fieldValues[2]), "1");
     }
 
     // Test group with multiple next hops
@@ -935,13 +937,15 @@ TEST_F(FpmSyncdResponseTest, TestUpdateNextHopGroupDb)
         EXPECT_TRUE(it->second.installed);
         vector<FieldValueTuple> fieldValues;
         nexthop_group_table.get("3", fieldValues);
-        EXPECT_EQ(fieldValues.size(), 3);
+        EXPECT_EQ(fieldValues.size(), 4);
         EXPECT_EQ(fvField(fieldValues[0]), "nexthop");
         EXPECT_EQ(fvValue(fieldValues[0]), "192.168.1.1,192.168.1.2");
         EXPECT_EQ(fvField(fieldValues[1]), "ifname");
         EXPECT_EQ(fvValue(fieldValues[1]), "Ethernet0,Ethernet1");
         EXPECT_EQ(fvField(fieldValues[2]), "weight");
         EXPECT_EQ(fvValue(fieldValues[2]), "1,2");
+        EXPECT_EQ(fvField(fieldValues[3]), "nexthop_id");
+        EXPECT_EQ(fvValue(fieldValues[3]), "1,2");
     }
 
     // Empty nexthop (default route case)
@@ -952,11 +956,13 @@ TEST_F(FpmSyncdResponseTest, TestUpdateNextHopGroupDb)
         vector<FieldValueTuple> fieldValues;
         nexthop_group_table.get("4", fieldValues);
 
-        EXPECT_EQ(fieldValues.size(), 2);
+        EXPECT_EQ(fieldValues.size(), 3);
         EXPECT_EQ(fvField(fieldValues[0]), "nexthop");
         EXPECT_EQ(fvValue(fieldValues[0]), "0.0.0.0");
         EXPECT_EQ(fvField(fieldValues[1]), "ifname");
         EXPECT_EQ(fvValue(fieldValues[1]), "Ethernet0");
+        EXPECT_EQ(fvField(fieldValues[2]), "nexthop_id");
+        EXPECT_EQ(fvValue(fieldValues[2]), "4");
     }
 
     // Empty interface name
@@ -967,9 +973,11 @@ TEST_F(FpmSyncdResponseTest, TestUpdateNextHopGroupDb)
         vector<FieldValueTuple> fieldValues;
         nexthop_group_table.get("5", fieldValues);
 
-        EXPECT_EQ(fieldValues.size(), 1);
+        EXPECT_EQ(fieldValues.size(), 2);
         EXPECT_EQ(fvField(fieldValues[0]), "nexthop");
         EXPECT_EQ(fvValue(fieldValues[0]), test_gateway);
+        EXPECT_EQ(fvField(fieldValues[1]), "nexthop_id");
+        EXPECT_EQ(fvValue(fieldValues[1]), "5");
     }
 }
 
@@ -1117,10 +1125,10 @@ TEST_F(FpmSyncdResponseTest, TestNextHopGroupAdd)
     string key = to_string(group_id);
     nexthop_group_table.get(key, fieldValues);
 
-    ASSERT_EQ(fieldValues.size(), 3) << "Wrong number of fields in DB";
+    ASSERT_EQ(fieldValues.size(), 4) << "Wrong number of fields in DB";
 
     // Verify the DB fields
-    string nexthops, ifnames, weights;
+    string nexthops, ifnames, weights, nexthop_ids;
     for (const auto& fv : fieldValues) {
         if (fvField(fv) == "nexthop") {
             nexthops = fvValue(fv);
@@ -1128,12 +1136,15 @@ TEST_F(FpmSyncdResponseTest, TestNextHopGroupAdd)
             ifnames = fvValue(fv);
         } else if (fvField(fv) == "weight") {
             weights = fvValue(fv);
+        } else if (fvField(fv) == "nexthop_id") {
+            nexthop_ids = fvValue(fv);
         }
     }
 
     EXPECT_EQ(nexthops, "192.168.1.1,192.168.1.2,192.168.1.3");
     EXPECT_EQ(ifnames, "Ethernet1,Ethernet2,Ethernet3");
     EXPECT_EQ(weights, "1,2,3");
+    EXPECT_EQ(nexthop_ids, to_string(nh1_id) + "," + to_string(nh2_id) + "," + to_string(nh3_id));
 
     // Cleanup
     free(nlh1);
@@ -1205,7 +1216,7 @@ TEST_F(FpmSyncdResponseTest, TestRouteMsgWithNHG)
 
         vector<FieldValueTuple> fvs;
         EXPECT_TRUE(route_table.get(test_destipprefix, fvs));
-        EXPECT_EQ(fvs.size(), 3);
+        EXPECT_EQ(fvs.size(), 4);
         for (const auto& fv : fvs) {
             if (fvField(fv) == "nexthop") {
                 EXPECT_EQ(fvValue(fv), test_gateway);
@@ -1213,6 +1224,8 @@ TEST_F(FpmSyncdResponseTest, TestRouteMsgWithNHG)
                 EXPECT_EQ(fvValue(fv), "Ethernet1");
             } else if (fvField(fv) == "protocol") {
                 EXPECT_EQ(fvValue(fv), "static");
+            } else if (fvField(fv) == "nexthop_id") {
+                EXPECT_EQ(fvValue(fv), to_string(test_nh_id));
             }
         }
     }
@@ -4655,8 +4668,8 @@ TEST_F(FpmSyncdResponseTest, TestRouteMsgWithZmqEnabled_AllFieldsIncluded)
     vector<FieldValueTuple> fvs;
     EXPECT_TRUE(route_table.get(test_destipprefix, fvs));
 
-    // With ZMQ enabled, all 11 fields should be present (including empty ones)
-    EXPECT_EQ(fvs.size(), 11);
+    // With ZMQ enabled, all 12 fields should be present (including empty ones)
+    EXPECT_EQ(fvs.size(), 12);
 
     // Build a map for easier verification
     std::map<std::string, std::string> fieldMap;
@@ -4669,6 +4682,7 @@ TEST_F(FpmSyncdResponseTest, TestRouteMsgWithZmqEnabled_AllFieldsIncluded)
     EXPECT_EQ(fieldMap["nexthop"], test_gateway);
     EXPECT_EQ(fieldMap["ifname"], "Ethernet1");
     EXPECT_EQ(fieldMap["blackhole"], "false");  // Default value
+    EXPECT_EQ(fieldMap["nexthop_id"], to_string(test_nh_id));
 
     // Verify empty fields are present
     EXPECT_TRUE(fieldMap.count("nexthop_group") > 0);
@@ -4739,7 +4753,7 @@ TEST_F(FpmSyncdResponseTest, TestRouteMsgWithZmqDisabled_OnlyNonEmptyFields)
     EXPECT_TRUE(route_table.get(test_destipprefix, fvs));
 
     // With ZMQ disabled, only non-empty fields should be present
-    EXPECT_EQ(fvs.size(), 3);  // protocol, nexthop, ifname
+    EXPECT_EQ(fvs.size(), 4);  // protocol, nexthop, ifname, nexthop_id
 
     // Build a map for easier verification
     std::map<std::string, std::string> fieldMap;
@@ -4751,6 +4765,7 @@ TEST_F(FpmSyncdResponseTest, TestRouteMsgWithZmqDisabled_OnlyNonEmptyFields)
     EXPECT_EQ(fieldMap["protocol"], "bgp");
     EXPECT_EQ(fieldMap["nexthop"], test_gateway);
     EXPECT_EQ(fieldMap["ifname"], "Ethernet2");
+    EXPECT_EQ(fieldMap["nexthop_id"], to_string(test_nh_id));
 
     // Verify empty fields are NOT present
     EXPECT_EQ(fieldMap.count("nexthop_group"), 0);

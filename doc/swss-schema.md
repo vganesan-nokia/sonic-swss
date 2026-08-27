@@ -169,6 +169,7 @@ and reflects the LAG ports into the redis under: `LAG_TABLE:<team0>:port`
     blackhole     = BIT ; Set to 1 if this route is a blackhole (or null0)
     weight        = weight_list              ; List of weights.
     nexthop_group = string ; index within the NEXTHOP_GROUP_TABLE, used instead of nexthop and intf fields
+    nexthop_id    = STRING ; next hop id assigned by FRR, aligned with the nexthop field. Informational only, not used for forwarding
     segment       = string ; SRV6 segment name
     seg_src       = string ; ipv6 address for SRV6 tunnel source
 
@@ -195,6 +196,7 @@ and reflects the LAG ports into the redis under: `LAG_TABLE:<team0>:port`
     ifname        = ifindex? PORT_TABLE.key  ; zero or more separated by “,” (zero indicates no interface)
     mpls_nh       = STRING                   ; Comma-separated list of MPLS NH info.
     weight        = weight_list              ; List of weights.
+    nexthop_id    = STRING                   ; Comma-separated list of next hop ids assigned by FRR, aligned with the nexthop field. Informational only, not used for forwarding
 
 ---------------------------------------------
 ### CLASS_BASED_NEXT_HOP_GROUP_TABLE
