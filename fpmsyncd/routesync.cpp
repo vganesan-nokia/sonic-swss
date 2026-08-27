@@ -1124,6 +1124,9 @@ RouteTableFieldValueTupleWrapper::fieldValueTupleVector() {
     if (nbZmqEnabled || includeEmptyFields || ifname != string()) {
         fvVector.push_back(FieldValueTuple("ifname", ifname.c_str()));
     }
+    if (nbZmqEnabled || includeEmptyFields || nexthop_id != string()) {
+        fvVector.push_back(FieldValueTuple("nexthop_id", nexthop_id.c_str()));
+    }
     if (nbZmqEnabled || includeEmptyFields || nexthop_group != string()) {
         fvVector.push_back(FieldValueTuple("nexthop_group", nexthop_group.c_str()));
     }
@@ -1226,6 +1229,7 @@ NextHopGroupTableFieldValueTupleWrapper::fieldValueTupleVector() {
         fvVector.push_back(FieldValueTuple("nexthop", nexthop.c_str()));
         fvVector.push_back(FieldValueTuple("ifname", ifname.c_str()));
         fvVector.push_back(FieldValueTuple("weight", weight.c_str()));
+        fvVector.push_back(FieldValueTuple("nexthop_id", nexthop_id.c_str()));
     } else {
         if (nexthop != string()) {
             fvVector.push_back(FieldValueTuple("nexthop", nexthop.c_str()));
@@ -1235,6 +1239,9 @@ NextHopGroupTableFieldValueTupleWrapper::fieldValueTupleVector() {
         }
         if (weight != string()) {
             fvVector.push_back(FieldValueTuple("weight", weight.c_str()));
+        }
+        if (nexthop_id != string()) {
+            fvVector.push_back(FieldValueTuple("nexthop_id", nexthop_id.c_str()));
         }
     }
     return fvVector;
@@ -2680,13 +2687,15 @@ void RouteSync::onRouteMsg(int nlmsg_type, struct nl_object *obj, char *vrf)
         {
             // Using route-table only for single next-hop
             string nexthops = nhg.nexthop.empty() ? (rtnl_route_get_family(route_obj) == AF_INET ? "0.0.0.0" : "::") : nhg.nexthop;
-            string ifnames, weights;
+            string ifnames, weights, nexthop_ids;
 
-            getNextHopGroupFields(nhg, nexthops, ifnames, weights, rtnl_route_get_family(route_obj));
+            getNextHopGroupFields(nhg, nexthops, ifnames, weights, rtnl_route_get_family(route_obj), &nexthop_ids);
             fvw.nexthop = std::move(nexthops);
             fvw.ifname = std::move(ifnames);
             if (!weights.empty())
                 fvw.weight = std::move(weights);
+            if (!nexthop_ids.empty())
+                fvw.nexthop_id = std::move(nexthop_ids);
 
             SWSS_LOG_DEBUG("NextHop group id %d is a single nexthop address. Filling the route table %s with nexthop and ifname", nhg_id, destipprefix);
         }
@@ -3872,12 +3881,14 @@ void RouteSync::updateNextHopGroupDb(const NextHopGroup& nhg)
     string nexthops;
     string ifnames;
     string weights;
+    string nexthop_ids;
     string key = getNextHopGroupKeyAsString(nhg.id);
-    getNextHopGroupFields(nhg, nexthops, ifnames, weights);
+    getNextHopGroupFields(nhg, nexthops, ifnames, weights, AF_INET, &nexthop_ids);
 
-    SWSS_LOG_INFO("NextHopGroup table set: key [%s] nexthop[%s] ifname[%s] weight[%s]",
+    SWSS_LOG_INFO("NextHopGroup table set: key [%s] nexthop[%s] ifname[%s] weight[%s] nexthop_id[%s]",
                   key.c_str(), nexthops.c_str(), ifnames.c_str(),
-                  weights.empty() ? "NONE": weights.c_str());
+                  weights.empty() ? "NONE": weights.c_str(),
+                  nexthop_ids.empty() ? "NONE": nexthop_ids.c_str());
 
     NextHopGroupTableFieldValueTupleWrapper fvw{std::move(key), isNbZmqEnabled()};
     fvw.nexthop = std::move(nexthops);
@@ -3885,6 +3896,10 @@ void RouteSync::updateNextHopGroupDb(const NextHopGroup& nhg)
     if(!weights.empty())
     {
         fvw.weight = std::move(weights);
+    }
+    if(!nexthop_ids.empty())
+    {
+        fvw.nexthop_id = std::move(nexthop_ids);
     }
     setTable(fvw, m_nexthop_groupTable);
 }
@@ -3917,7 +3932,7 @@ void RouteSync::updatePicContextGroupDb(const NextHopGroup& nhg)
  * @arg nhg     the nexthop group
  *
  */
-void RouteSync::getNextHopGroupFields(const NextHopGroup& nhg, string& nexthops, string& ifnames, string& weights, uint8_t af /*= AF_INET*/)
+void RouteSync::getNextHopGroupFields(const NextHopGroup& nhg, string& nexthops, string& ifnames, string& weights, uint8_t af /*= AF_INET*/, string* nexthop_ids /*= nullptr*/)
 {
     if(nhg.group.size() == 0)
     {
@@ -3930,6 +3945,10 @@ void RouteSync::getNextHopGroupFields(const NextHopGroup& nhg, string& nexthops,
             nexthops = af == AF_INET ? "0.0.0.0" : "::";
         }
         ifnames = nhg.intf;
+        if(nexthop_ids)
+        {
+            *nexthop_ids = to_string(nhg.id);
+        }
     }
     else
     {
@@ -3951,10 +3970,18 @@ void RouteSync::getNextHopGroupFields(const NextHopGroup& nhg, string& nexthops,
                 nexthops += NHG_DELIMITER;
                 ifnames += NHG_DELIMITER;
                 weights += NHG_DELIMITER;
+                if(nexthop_ids)
+                {
+                    *nexthop_ids += NHG_DELIMITER;
+                }
             }
             nexthops += nhgr.nexthop.empty() ? (af == AF_INET ? "0.0.0.0" : "::") : nhgr.nexthop;
             ifnames += nhgr.intf;
             weights += weight;
+            if(nexthop_ids)
+            {
+                *nexthop_ids += to_string(id);
+            }
             ++i;
         }
     }

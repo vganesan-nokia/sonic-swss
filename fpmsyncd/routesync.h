@@ -118,6 +118,9 @@ class RouteTableFieldValueTupleWrapper : public FieldValueTupleWrapperBase {
     string router_mac = string();
     string segment = string();
     string seg_src = string();
+    /* Next-hop id assigned by FRR, which may also be the id of a next-hop in a
+     * member list. Not used for forwarding, published for telemetry only. */
+    string nexthop_id = string();
     bool includeEmptyFields = false;
 };
 
@@ -180,6 +183,9 @@ class NextHopGroupTableFieldValueTupleWrapper : public FieldValueTupleWrapperBas
     string nexthop = string();
     string ifname = string();
     string weight = string();
+    /* Next-hop ids assigned by FRR, aligned with the lists above. Not used for
+     * forwarding, published for telemetry only. */
+    string nexthop_id = string();
 };
 
 class Srv6MySidTableFieldValueTupleWrapper : public FieldValueTupleWrapperBase {
@@ -407,7 +413,7 @@ private:
     void deletePicContextGroup(uint32_t nh_id);
     void updateNextHopGroupDb(const NextHopGroup& nhg);
     void updatePicContextGroupDb(const NextHopGroup& nhg);
-    void getNextHopGroupFields(const NextHopGroup& nhg, string& nexthops, string& ifnames, string& weights, uint8_t af = AF_INET);
+    void getNextHopGroupFields(const NextHopGroup& nhg, string& nexthops, string& ifnames, string& weights, uint8_t af = AF_INET, string* nexthop_ids = nullptr);
     void getPicContextGroupFields(const NextHopGroup& nhg, struct NextHopField& nhField, uint8_t af = AF_INET);
     bool isNbZmqEnabled() const
     {
